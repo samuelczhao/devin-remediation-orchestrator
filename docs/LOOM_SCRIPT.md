@@ -6,11 +6,12 @@ architecture file open before recording.
 ## 0:00–0:40 — What
 
 “Engineering teams accumulate maintenance work that is valuable but expensive to reproduce,
-implement, test, and move into review. I chose two real Superset defects: a database export path
-that can silently omit a dataset, and a tag backfill that writes the wrong enum. The team retains
-control through one label: `devin:ready`.”
+implement, test, and move into review. I chose three real Superset defects: a database export path
+that can silently omit a dataset, a tag backfill that writes the wrong enum, and shared export
+state that can corrupt concurrent results. The team retains control through one label:
+`devin:ready`.”
 
-Show both public issues and their acceptance criteria.
+Show the three public issues and their acceptance criteria.
 
 ## 0:40–1:35 — How: architecture
 
@@ -63,4 +64,4 @@ reviewer acceptance, CI pass rate, cycle time, and ACUs by issue class. Next I w
 Postgres, add lease-based workers and SSO/RBAC, ingest CI and review outcomes, alert on stuck tasks,
 and expand repository policies only after the evidence supports it.”
 
-End on the two live evidence rows. Keep claims limited to what the two runs actually demonstrate.
+End on the three live evidence rows. Keep claims limited to what the three runs actually demonstrate.

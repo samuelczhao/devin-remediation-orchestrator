@@ -11,6 +11,7 @@ proves orchestration mechanics; it is not presented as proof that Devin remediat
 | Inspected fork commit | `e7dccd44a7c212739147155548e689e9d6b3408f` |
 | Defect 1 | [Issue #1](https://github.com/samuelczhao/superset/issues/1) |
 | Defect 2 | [Issue #2](https://github.com/samuelczhao/superset/issues/2) |
+| Defect 3 | [Issue #3](https://github.com/samuelczhao/superset/issues/3) |
 | Trigger label | `devin:ready`, created but deliberately not applied before the live safety gate |
 | Branch protection | One approval, conversation resolution, admins enforced, no force pushes/deletion |
 
@@ -32,7 +33,7 @@ the UI and output.
 
 ## Live remediation evidence
 
-These rows must be completed only after token rotation, repository restriction, and the two paid
+These rows must be completed only after the live safety gate and the three paid
 sessions. A terminal Devin session without a target-fork PR is not counted as a successful
 remediation.
 
@@ -40,6 +41,7 @@ remediation.
 | --- | --- | --- | --- | --- | --- |
 | [#1](https://github.com/samuelczhao/superset/issues/1) | Pending live run | Pending | Pending | Pending | Pending |
 | [#2](https://github.com/samuelczhao/superset/issues/2) | Pending live run | Pending | Pending | Pending | Pending |
+| [#3](https://github.com/samuelczhao/superset/issues/3) | Pending live run | Pending | Pending | Pending | Pending |
 
 For each completed row, inspect the diff, preserve the exact session-reported test command, and
 link GitHub CI separately. Do not infer correctness from `status=exit` or from a PR existing.

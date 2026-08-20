@@ -27,13 +27,13 @@ signed webhook ingress -----> SQLite delivery/task/event ledger
 | Assignment requirement | Implementation | Completion evidence |
 | --- | --- | --- |
 | Fork Apache Superset | Public `samuelczhao/superset` fork pinned to the inspected commit | Fork URL and commit SHA in README |
-| Identify issues | Two reproducible defects with bounded acceptance criteria | Public issues in the fork |
+| Identify issues | Three reproducible defects with bounded acceptance criteria | Public issues in the fork |
 | Event trigger | `issues.labeled` webhook for `devin:ready` | GitHub delivery plus persisted delivery ID |
 | Initiate Devin | `POST /v3/organizations/{org_id}/sessions` | Session ID and link |
 | Manage Devin | Durable polling and explicit blocked/failure mapping | State-transition history and current status |
 | Observable output | Devin-created PR against the fork | PR URL, state, and structured result |
 | Analytics | Counts, PR yield, cycle time, ACUs, progress, failures | HTML dashboard and `/api/metrics` |
-| Working remediation | Two real live sessions, not only a fake demo | Issue-to-session-to-PR evidence table |
+| Working remediation | Three real live sessions, not only a fake demo | Issue-to-session-to-PR evidence table |
 | Docker | One-worker application image with persistent SQLite volume | Container smoke and restart tests |
 | Reproducible demo | Signed deterministic fake webhook through the real ingress path | README command and automated test |
 | Five-minute presentation | What, How, Why, When narrative grounded in observed results | Loom script and recording checklist |
@@ -87,7 +87,7 @@ queued -> creating -> running -> completed_with_pr
 The dashboard reports **PR production rate**, not correctness. A task is
 `completed_with_pr` only when Devin is terminal, structured output is valid, and the PR URL points
 to `samuelczhao/superset`. Devin-reported tests are labeled as such. The final evidence separately
-records targeted test and GitHub CI results; no two-run sample is used to claim broad productivity
+records targeted test and GitHub CI results; no three-run sample is used to claim broad productivity
 or quality improvements.
 
 ## Observability

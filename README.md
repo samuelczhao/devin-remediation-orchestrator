@@ -9,6 +9,7 @@ The selected defects are:
 
 - [#1: database export can silently drop same-named datasets](https://github.com/samuelczhao/superset/issues/1)
 - [#2: sync-tags assigns favorite tags the wrong type](https://github.com/samuelczhao/superset/issues/2)
+- [#3: dashboard export mutates process-global chart tag state](https://github.com/samuelczhao/superset/issues/3)
 
 ## Why this workflow
 
@@ -117,11 +118,12 @@ verification, and only the Issues event. GitHub's
 [signature validation guidance](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries)
 is implemented over the raw body.
 
-Trigger the two bounded remediations:
+Trigger the three bounded remediations:
 
 ```bash
 gh issue edit 1 --repo samuelczhao/superset --add-label devin:ready
 gh issue edit 2 --repo samuelczhao/superset --add-label devin:ready
+gh issue edit 3 --repo samuelczhao/superset --add-label devin:ready
 ```
 
 Keep approvals enabled unless the Devin installation is repository-limited and an unattended
@@ -159,7 +161,7 @@ The dashboard and `/api/metrics` answer whether the workflow is operating:
 - worker health plus safe error/status fields.
 
 PR yield is intentionally not labeled “success rate.” Devin-reported test commands are agent
-claims until confirmed by the PR's CI and reviewer inspection. With only two live runs, the
+claims until confirmed by the PR's CI and reviewer inspection. With only three live runs, the
 submission reports observed results rather than generalized productivity claims.
 
 ## Evidence and presentation
@@ -168,6 +170,7 @@ submission reports observed results rather than generalized productivity claims.
 - [Five-minute Loom runbook](docs/LOOM_SCRIPT.md)
 - [Issue #1 technical specification](docs/issues/database-export-dataset-collision.md)
 - [Issue #2 technical specification](docs/issues/sync-tags-favorite-type.md)
+- [Issue #3 technical specification](docs/issues/dashboard-export-global-tag-state.md)
 
 ## Production extension
 
