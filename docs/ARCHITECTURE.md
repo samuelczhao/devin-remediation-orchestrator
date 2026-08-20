@@ -27,13 +27,13 @@ signed webhook ingress -----> SQLite delivery/task/event ledger
 | Assignment requirement | Implementation | Completion evidence |
 | --- | --- | --- |
 | Fork Apache Superset | Public `samuelczhao/superset` fork pinned to the inspected commit | Fork URL and commit SHA in README |
-| Identify issues | Two reproducible defects with bounded acceptance criteria | Public issues in the fork |
+| Identify issues | Three initial defects plus one corrective issue with bounded acceptance criteria | Public issues in the fork |
 | Event trigger | `issues.labeled` webhook for `devin:ready` | GitHub delivery plus persisted delivery ID |
 | Initiate Devin | `POST /v3/organizations/{org_id}/sessions` | Session ID and link |
 | Manage Devin | Durable polling and explicit blocked/failure mapping | State-transition history and current status |
 | Observable output | Devin-created PR against the fork | PR URL, state, and structured result |
 | Analytics | Counts, PR yield, cycle time, ACUs, progress, failures | HTML dashboard and `/api/metrics` |
-| Working remediation | Two real live sessions, not only a fake demo | Issue-to-session-to-PR evidence table |
+| Working remediation | Real live sessions plus independent review, not only a fake demo | Issue-to-session-to-PR evidence table |
 | Docker | One-worker application image with persistent SQLite volume | Container smoke and restart tests |
 | Reproducible demo | Signed deterministic fake webhook through the real ingress path | README command and automated test |
 | Five-minute presentation | What, How, Why, When narrative grounded in observed results | Loom script and recording checklist |
@@ -50,8 +50,9 @@ GitHub issue text is untrusted. A request is accepted only when all of these che
 6. The labeling actor's login and numeric ID both match the allowlist.
 
 The issue body is truncated and control characters are removed before prompting. Devin gets no
-session secrets. Its GitHub installation is restricted to the fork. Sessions have an ACU cap,
-operate on one repository, create PRs only, and cannot merge.
+session secrets. Each session explicitly targets only the fork; production setup should also
+restrict the GitHub installation to that repository. Sessions have an ACU cap, create PRs only,
+and cannot merge.
 
 ## Ownership and idempotency
 
@@ -64,8 +65,11 @@ request. Every session uses the task ID in its title and tags. The reconciler se
 sessions for that tag before deciding that operator attention is required; it never blindly
 retries an ambiguous creation.
 
-On restart, the reconciler sweeps queued, creating, running, and needs-attention tasks. This is
-separate from request error handling because process termination can bypass in-process cleanup.
+On restart, the live reconciler sweeps queued, creating, running, and needs-attention tasks. An
+ambiguous create with no session ID repeats tag-only discovery after a 30-second backoff, so a
+session hidden by eventual-consistency lag can be recovered without ever repeating the POST. The
+fake adapter intentionally guarantees restart persistence only after its simulated task is
+terminal; its remote-session state is in memory.
 
 ## State model
 
@@ -78,6 +82,8 @@ queued -> creating -> running -> completed_with_pr
 
 - `new`, `claimed`, `running`, and `resuming` remain active.
 - `waiting_for_user` and `waiting_for_approval` require attention.
+- A finished or waiting session is terminated only when it has a valid terminal result and any
+  claimed PR targets the fork. Invalid finished results stay attention-required.
 - `suspended` requires attention with its reason preserved.
 - `error` is a failed session.
 - `exit` is only lifecycle completion; it is not automatically business success.
@@ -87,7 +93,7 @@ queued -> creating -> running -> completed_with_pr
 The dashboard reports **PR production rate**, not correctness. A task is
 `completed_with_pr` only when Devin is terminal, structured output is valid, and the PR URL points
 to `samuelczhao/superset`. Devin-reported tests are labeled as such. The final evidence separately
-records targeted test and GitHub CI results; no two-run sample is used to claim broad productivity
+records targeted test and GitHub CI results; no three-run sample is used to claim broad productivity
 or quality improvements.
 
 ## Observability
@@ -100,14 +106,17 @@ The dashboard and JSON API expose:
 - median issue-to-PR cycle time and PR production rate;
 - safe error codes and status details.
 
-Logs are structured around delivery, task, issue, and session IDs. Tokens, signatures, raw bodies,
-issue bodies, and full prompts are never logged.
+The acceptance log records task and issue IDs; the SQLite event ledger records every state change,
+and per-task error codes preserve session failures. Tokens, signatures, raw bodies, issue bodies,
+and full prompts are never logged.
 
 ## Deliberate MVP limits
 
 - One application process and one reconciler. Production would use Postgres plus a dedicated
   worker and lease-based claims.
 - Local SQLite is durable for the demo but not a multi-replica queue.
+- The default Compose file is simulation-only. Live mode requires the explicit
+  `compose.live.yaml` override and all three credentials; the simulator also checks backend mode.
 - An HTTPS tunnel provides the live GitHub delivery; deterministic simulation remains available.
 - No auto-merge, issue-comment bot, authentication platform, frontend framework, or enterprise
   analytics are included.

@@ -4,7 +4,7 @@ import hmac
 import json
 import os
 import time
-from typing import Any
+from typing import Any, cast
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from uuid import uuid4
@@ -19,6 +19,22 @@ TERMINAL_STATES = {
     "completed_without_pr",
     "failed",
 }
+
+
+def require_simulation_mode() -> None:
+    deadline = time.monotonic() + TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
+        try:
+            health = request_json("/health/ready")
+        except RuntimeError:
+            time.sleep(POLL_SECONDS)
+            continue
+        if health.get("mode") != "simulation":
+            raise RuntimeError("Refusing to send a simulated issue to a non-simulation server")
+        if health.get("status") == "ready":
+            return
+        time.sleep(POLL_SECONDS)
+    raise TimeoutError("Simulation server did not become ready")
 
 
 def payload() -> dict[str, object]:
@@ -63,7 +79,19 @@ def wait_for_terminal(task_id: str) -> dict[str, Any]:
     deadline = time.monotonic() + TIMEOUT_SECONDS
     while time.monotonic() < deadline:
         tasks = request_json("/api/tasks")
-        task = next(item for item in tasks if item["id"] == task_id)
+        if not isinstance(tasks, list):
+            raise RuntimeError("Task API returned a non-list response")
+        task = next(
+            (
+                item
+                for item in tasks
+                if isinstance(item, dict) and item.get("id") == task_id
+            ),
+            None,
+        )
+        if task is None:
+            raise RuntimeError(f"Task API omitted accepted task {task_id}")
+        task = cast(dict[str, Any], task)
         print(f"state={task['state']} acus={task['acus_consumed']}")
         if task["state"] in TERMINAL_STATES:
             return task
@@ -72,6 +100,7 @@ def wait_for_terminal(task_id: str) -> dict[str, Any]:
 
 
 def main() -> None:
+    require_simulation_mode()
     raw = json.dumps(payload(), separators=(",", ":")).encode()
     accepted = request_json("/webhooks/github", body=raw)
     print(json.dumps(accepted, indent=2))

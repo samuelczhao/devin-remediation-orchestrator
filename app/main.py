@@ -83,7 +83,10 @@ def create_app(
     async def ready() -> JSONResponse:
         ready_now = orchestrator.last_successful_run is not None
         return JSONResponse(
-            {"status": "ready" if ready_now else "starting"},
+            {
+                "status": "ready" if ready_now else "starting",
+                "mode": config.app_mode,
+            },
             status_code=200 if ready_now else 503,
         )
 

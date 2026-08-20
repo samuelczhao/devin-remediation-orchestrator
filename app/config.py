@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     github_allowed_actor_id: int = Field(default=30_126_000, gt=0)
     trigger_label: str = "devin:ready"
     poll_interval_seconds: float = Field(default=2.0, gt=0)
+    ambiguous_recovery_interval_seconds: float = Field(default=30.0, ge=0)
     max_webhook_bytes: int = Field(default=1_000_000, gt=0)
 
     @model_validator(mode="after")

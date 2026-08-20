@@ -49,6 +49,8 @@ class DevinClient(Protocol):
 
     async def find_session_by_tag(self, tag: str) -> DevinSession | None: ...
 
+    async def terminate_session(self, session_id: str) -> DevinSession: ...
+
     async def aclose(self) -> None: ...
 
 
@@ -78,18 +80,28 @@ class LiveDevinClient:
         return DevinSession.model_validate(response.json())
 
     async def get_session(self, session_id: str) -> DevinSession:
-        response = await self.http.get(f"{self.base_path}/{session_id}")
-        self._raise(response)
+        response = await self._request("GET", f"{self.base_path}/{session_id}")
         return DevinSession.model_validate(response.json())
 
     async def find_session_by_tag(self, tag: str) -> DevinSession | None:
-        response = await self.http.get(self.base_path, params={"first": 100})
-        self._raise(response)
+        response = await self._request("GET", self.base_path, params={"first": 100})
         sessions = _parse_sessions(response.json().get("items", []))
         return next((session for session in sessions if tag in session.tags), None)
 
+    async def terminate_session(self, session_id: str) -> DevinSession:
+        response = await self._request("DELETE", f"{self.base_path}/{session_id}")
+        return DevinSession.model_validate(response.json())
+
     async def aclose(self) -> None:
         await self.http.aclose()
+
+    async def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
+        try:
+            response = await self.http.request(method, path, **kwargs)
+        except httpx.TransportError as error:
+            raise DevinAPIError("Devin API transport failure") from error
+        self._raise(response)
+        return response
 
     def _create_payload(self, task: TaskRecord) -> dict[str, Any]:
         tag = task_tag(task.id)
@@ -144,6 +156,12 @@ class FakeDevinClient:
         return next(
             (session for session, _ in self.sessions.values() if tag in session.tags), None
         )
+
+    async def terminate_session(self, session_id: str) -> DevinSession:
+        session, polls = self.sessions[session_id]
+        terminated = session.model_copy(update={"status": "exit", "status_detail": None})
+        self.sessions[session_id] = (terminated, polls)
+        return terminated
 
     async def aclose(self) -> None:
         return None

@@ -6,11 +6,12 @@ architecture file open before recording.
 ## 0:00–0:40 — What
 
 “Engineering teams accumulate maintenance work that is valuable but expensive to reproduce,
-implement, test, and move into review. I chose two real Superset defects: a database export path
-that can silently omit a dataset, and a tag backfill that writes the wrong enum. The team retains
-control through one label: `devin:ready`.”
+implement, test, and move into review. I chose three real Superset workflows: database export,
+tag backfill, and dashboard export isolation. The team retains control through one label:
+`devin:ready`.”
 
-Show both public issues and their acceptance criteria.
+Show issues #1, #2, and #3. Briefly point to corrective issue #7: independent review rejected the
+first #2 PR and fed the expanded failure back through the same automation.
 
 ## 0:40–1:35 — How: architecture
 
@@ -35,15 +36,19 @@ Show a GitHub webhook delivery or replay the deterministic Docker simulation:
 docker compose exec orchestrator /app/.venv/bin/python scripts/simulate_webhook.py
 ```
 
-Show the dashboard move through queued/running/terminal states. Then open a real Devin session and
-its Superset PR. Explain the code change and show the focused regression test. Do not call the
-simulated PR real; use it only to demonstrate repeatability when the live task is already done.
+Show the dashboard move through queued/running/terminal states. Then open the issue #7 Devin
+session and PR #8. Explain the SQLAlchemy 2, portable concatenation, and transaction changes, then
+show the reserved-name regression test added after independent review. Do not call the simulated
+PR real; use it only to demonstrate repeatability when the live task is already done. The command
+refuses to run if the backend reports live mode.
 
 ## 2:40–3:30 — Observability and failure behavior
 
 “A VP can see queue depth, active and attention-required tasks, failures, PR yield, cycle time, and
 ACUs. Every row links back to the issue, session, and PR. PR yield means workflow output, not code
-quality; Devin-reported tests remain labeled as agent claims until GitHub CI confirms them.”
+quality: this run produced four PRs, but independent review rejected PR #5 and the replacement PR
+#8 had to incorporate a second review correction. Devin-reported tests remain agent claims until
+GitHub CI confirms them.”
 
 Show `/api/metrics`, one completed task, and—if available—one waiting/failure mapping in tests.
 Mention that duplicate webhook delivery cannot spend twice and state survives restart.
@@ -63,4 +68,5 @@ reviewer acceptance, CI pass rate, cycle time, and ACUs by issue class. Next I w
 Postgres, add lease-based workers and SSO/RBAC, ingest CI and review outcomes, alert on stuck tasks,
 and expand repository policies only after the evidence supports it.”
 
-End on the two live evidence rows. Keep claims limited to what the two runs actually demonstrate.
+End on the evidence table: PRs #4, #6, and #8 are the three accepted remediation candidates; PR
+#5 is closed unmerged. Keep claims limited to this small live sample.
