@@ -1,0 +1,42 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  background: #0b0d10;
+  color: #f5f7fa;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: radial-gradient(circle at top, #172033, #0b0d10 48%); }
+main { width: min(1180px, calc(100% - 40px)); margin: 0 auto; padding: 56px 0; }
+header, .panel-heading { display: flex; justify-content: space-between; gap: 24px; align-items: start; }
+h1 { margin: 6px 0 8px; font-size: clamp(32px, 5vw, 54px); letter-spacing: -0.04em; }
+h2 { margin: 4px 0; }
+p { color: #aeb8c7; }
+.eyebrow { margin: 0; color: #72e0b3; font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.mode, .status { display: inline-flex; border-radius: 999px; padding: 7px 11px; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.mode { background: #242b37; border: 1px solid #3b4657; }
+.mode.live, .status.completed_with_pr { background: #123d2d; color: #7ff0be; }
+.metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 38px 0 24px; }
+.metrics article, .panel { border: 1px solid #263143; background: rgba(16, 20, 27, .88); box-shadow: 0 16px 60px rgba(0, 0, 0, .2); }
+.metrics article { border-radius: 14px; padding: 20px; }
+.metrics strong { display: block; font-size: 28px; }
+.metrics span { color: #91a0b5; font-size: 13px; }
+.panel { border-radius: 18px; padding: 24px; }
+.panel-heading { align-items: end; margin-bottom: 20px; }
+.panel-heading > span, .footnote { color: #7f8da2; font-size: 12px; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 15px 12px; border-bottom: 1px solid #222b38; text-align: left; font-size: 13px; }
+th { color: #7f8da2; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+a { color: #a8c7ff; text-decoration: none; }
+a:hover { text-decoration: underline; }
+.status { background: #273143; color: #c6d2e3; }
+.status.failed, .status.blocked { background: #492027; color: #ffadb7; }
+.status.needs_attention { background: #493b18; color: #f4d77b; }
+.empty { padding: 44px; color: #7f8da2; text-align: center; }
+.footnote { margin: 18px 0 0; }
+
+@media (max-width: 800px) {
+  .metrics { grid-template-columns: repeat(2, 1fr); }
+  header, .panel-heading { flex-direction: column; }
+}

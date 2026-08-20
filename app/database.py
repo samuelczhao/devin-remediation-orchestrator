@@ -7,7 +7,7 @@ from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
-from app.schemas import IssueLabeledPayload, TaskRecord, TaskState
+from app.schemas import IssueLabeledPayload, TaskMetrics, TaskRecord, TaskState
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS deliveries (
@@ -224,6 +224,25 @@ class TaskStore:
             row = connection.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
         return _to_task(row) if row else None
 
+    def metrics(self) -> TaskMetrics:
+        tasks = self.list_tasks()
+        counts = {state: sum(task.state == state for task in tasks) for state in TaskState}
+        terminal = sum(task.state in _terminal_states() for task in tasks)
+        pr_produced = counts[TaskState.COMPLETED_WITH_PR]
+        return TaskMetrics(
+            total=len(tasks),
+            queued=counts[TaskState.QUEUED],
+            active=counts[TaskState.CREATING] + counts[TaskState.RUNNING],
+            needs_attention=counts[TaskState.NEEDS_ATTENTION],
+            blocked=counts[TaskState.BLOCKED],
+            failed=counts[TaskState.FAILED],
+            pr_produced=pr_produced,
+            terminal=terminal,
+            pr_yield=_ratio(pr_produced, terminal),
+            total_acus=sum((task.acus_consumed for task in tasks), Decimal("0")),
+            median_cycle_seconds=_median_cycle(tasks),
+        )
+
     def _get(self, connection: sqlite3.Connection, task_id: str) -> TaskRecord:
         row = connection.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
         if not row:
@@ -279,3 +298,23 @@ def _terminal_states() -> set[TaskState]:
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _ratio(numerator: int, denominator: int) -> Decimal:
+    if not denominator:
+        return Decimal("0")
+    return (Decimal(numerator) / Decimal(denominator)).quantize(Decimal("0.01"))
+
+
+def _median_cycle(tasks: list[TaskRecord]) -> Decimal | None:
+    durations = sorted(
+        Decimal(str((task.completed_at - task.created_at).total_seconds()))
+        for task in tasks
+        if task.completed_at
+    )
+    if not durations:
+        return None
+    middle = len(durations) // 2
+    if len(durations) % 2:
+        return durations[middle]
+    return (durations[middle - 1] + durations[middle]) / Decimal("2")

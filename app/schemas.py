@@ -108,3 +108,17 @@ class TaskRecord(BaseModel):
     created_at: datetime
     updated_at: datetime
     completed_at: datetime | None = None
+
+
+class TaskMetrics(BaseModel):
+    total: int
+    queued: int
+    active: int
+    needs_attention: int
+    blocked: int
+    failed: int
+    pr_produced: int
+    terminal: int
+    pr_yield: Decimal
+    total_acus: Decimal
+    median_cycle_seconds: Decimal | None
