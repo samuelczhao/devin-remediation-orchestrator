@@ -12,3 +12,6 @@
 - Devin may leave a completed API session at `finished` or `waiting_for_user` after publishing a
   structured result. Validate the result and target PR, then use the v3 termination endpoint;
   otherwise the task remains active indefinitely.
+- A target PR plus passing agent-reported tests is an output signal, not a correctness signal.
+  Review exact reserved-name collisions and production-database semantics; a broad "unrelated
+  tags unchanged" test missed a same-name custom tag that would receive invalid associations.

@@ -10,13 +10,17 @@ The selected defects are:
 - [#1: database export can silently drop same-named datasets](https://github.com/samuelczhao/superset/issues/1)
 - [#2: sync-tags assigns favorite tags the wrong type](https://github.com/samuelczhao/superset/issues/2)
 - [#3: dashboard export mutates process-global chart tag state](https://github.com/samuelczhao/superset/issues/3)
+- [#7: sync-tags backfill is incompatible with SQLAlchemy 2 and portable SQL](https://github.com/samuelczhao/superset/issues/7),
+  opened after independent review showed that the first #2 remediation was incomplete
 
 ## Why this workflow
 
 Maintenance backlogs contain valuable fixes that are individually understandable but expensive
 to reproduce, implement, test, and shepherd into review. This system leaves prioritization with
 the engineering team—the `devin:ready` label is the control point—while Devin owns the bounded
-repository work needed to produce a reviewable PR.
+repository work needed to produce a reviewable PR. Reviewer judgment stays outside the agent:
+independent review can reject a PR, create a better-scoped follow-up issue, and send that issue
+through the same workflow.
 
 ```text
 GitHub issues.labeled webhook
@@ -119,12 +123,13 @@ verification, and only the Issues event. GitHub's
 [signature validation guidance](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries)
 is implemented over the raw body.
 
-Trigger the three bounded remediations:
+Trigger the bounded remediations:
 
 ```bash
 gh issue edit 1 --repo samuelczhao/superset --add-label devin:ready
 gh issue edit 2 --repo samuelczhao/superset --add-label devin:ready
 gh issue edit 3 --repo samuelczhao/superset --add-label devin:ready
+gh issue edit 7 --repo samuelczhao/superset --add-label devin:ready
 ```
 
 Keep approvals enabled unless the Devin installation is repository-limited and an unattended
@@ -164,8 +169,19 @@ The dashboard and `/api/metrics` answer whether the workflow is operating:
 - worker health plus safe error/status fields.
 
 PR yield is intentionally not labeled “success rate.” Devin-reported test commands are agent
-claims until confirmed by the PR's CI and reviewer inspection. With only three live runs, the
-submission reports observed results rather than generalized productivity claims.
+claims until confirmed by the PR's CI and reviewer inspection. The submission reports observed
+results from a small live sample rather than generalized productivity claims.
+
+## Observed live result
+
+Four signed issue events produced four target-fork PR artifacts. Independent review accepted
+[PR #4](https://github.com/samuelczhao/superset/pull/4) and
+[PR #6](https://github.com/samuelczhao/superset/pull/6), rejected and closed
+[PR #5](https://github.com/samuelczhao/superset/pull/5), then accepted its corrected replacement
+[PR #8](https://github.com/samuelczhao/superset/pull/8) after a second review-driven amendment.
+The final dashboard snapshot showed no active or failed tasks, 617.96-second median cycle time,
+and 0.0 cumulative ACUs as reported by the Devin API. The fork has no GitHub checks configured,
+so exact session-reported tests and independent review limits remain explicit in the evidence.
 
 ## Evidence and presentation
 
@@ -174,6 +190,7 @@ submission reports observed results rather than generalized productivity claims.
 - [Issue #1 technical specification](docs/issues/database-export-dataset-collision.md)
 - [Issue #2 technical specification](docs/issues/sync-tags-favorite-type.md)
 - [Issue #3 technical specification](docs/issues/dashboard-export-global-tag-state.md)
+- [Issue #7 corrective technical specification](docs/issues/sync-tags-sqlalchemy2-portability.md)
 
 ## Production extension
 

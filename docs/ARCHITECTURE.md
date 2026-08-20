@@ -27,13 +27,13 @@ signed webhook ingress -----> SQLite delivery/task/event ledger
 | Assignment requirement | Implementation | Completion evidence |
 | --- | --- | --- |
 | Fork Apache Superset | Public `samuelczhao/superset` fork pinned to the inspected commit | Fork URL and commit SHA in README |
-| Identify issues | Three reproducible defects with bounded acceptance criteria | Public issues in the fork |
+| Identify issues | Three initial defects plus one corrective issue with bounded acceptance criteria | Public issues in the fork |
 | Event trigger | `issues.labeled` webhook for `devin:ready` | GitHub delivery plus persisted delivery ID |
 | Initiate Devin | `POST /v3/organizations/{org_id}/sessions` | Session ID and link |
 | Manage Devin | Durable polling and explicit blocked/failure mapping | State-transition history and current status |
 | Observable output | Devin-created PR against the fork | PR URL, state, and structured result |
 | Analytics | Counts, PR yield, cycle time, ACUs, progress, failures | HTML dashboard and `/api/metrics` |
-| Working remediation | Three real live sessions, not only a fake demo | Issue-to-session-to-PR evidence table |
+| Working remediation | Real live sessions plus independent review, not only a fake demo | Issue-to-session-to-PR evidence table |
 | Docker | One-worker application image with persistent SQLite volume | Container smoke and restart tests |
 | Reproducible demo | Signed deterministic fake webhook through the real ingress path | README command and automated test |
 | Five-minute presentation | What, How, Why, When narrative grounded in observed results | Loom script and recording checklist |
@@ -50,8 +50,9 @@ GitHub issue text is untrusted. A request is accepted only when all of these che
 6. The labeling actor's login and numeric ID both match the allowlist.
 
 The issue body is truncated and control characters are removed before prompting. Devin gets no
-session secrets. Its GitHub installation is restricted to the fork. Sessions have an ACU cap,
-operate on one repository, create PRs only, and cannot merge.
+session secrets. Each session explicitly targets only the fork; production setup should also
+restrict the GitHub installation to that repository. Sessions have an ACU cap, create PRs only,
+and cannot merge.
 
 ## Ownership and idempotency
 
