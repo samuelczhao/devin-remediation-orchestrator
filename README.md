@@ -107,6 +107,7 @@ export DEVIN_ORG_ID="$(security find-generic-password \
 export GITHUB_WEBHOOK_SECRET="$(security find-generic-password \
   -s devin-remediation-orchestrator-webhook -a superset-remediation-bot -w)"
 export APP_MODE=live
+export DATABASE_PATH=/data/live-orchestrator.db
 export DEVIN_MAX_ACU_LIMIT=3
 export DEVIN_BYPASS_APPROVAL=false
 docker compose up --build -d
