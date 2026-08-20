@@ -78,6 +78,8 @@ queued -> creating -> running -> completed_with_pr
 
 - `new`, `claimed`, `running`, and `resuming` remain active.
 - `waiting_for_user` and `waiting_for_approval` require attention.
+- A finished session is terminated after its structured result is captured; a waiting session is
+  terminated only when it already has a valid terminal result and any claimed PR targets the fork.
 - `suspended` requires attention with its reason preserved.
 - `error` is a failed session.
 - `exit` is only lifecycle completion; it is not automatically business success.

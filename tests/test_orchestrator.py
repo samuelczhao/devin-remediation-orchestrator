@@ -1,10 +1,14 @@
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
+from app.config import Settings
+from app.database import TaskStore
 from app.devin_client import FakeDevinClient
-from app.orchestrator import evaluate_session
+from app.orchestrator import Orchestrator, evaluate_session, should_terminate_session
 from app.schemas import DevinPullRequest, DevinSession, TaskState
+from tests.factories import issue_payload
 
 REPOSITORY = "samuelczhao/superset"
 
@@ -57,6 +61,71 @@ def test_exit_requires_target_repository_pr() -> None:
         REPOSITORY,
     )
     assert observation.state == TaskState.FAILED
+
+
+def test_finished_session_evaluates_terminal_result() -> None:
+    result: dict[str, object] = {
+        "result": "no_change_needed",
+        "summary": "Already fixed",
+        "tests": [],
+        "commit_sha": None,
+        "pr_url": None,
+        "failure_reason": None,
+    }
+    observation = evaluate_session(
+        session(status_detail="finished", structured_output=result), REPOSITORY
+    )
+    assert observation.state == TaskState.COMPLETED_WITHOUT_PR
+
+
+def test_waiting_session_with_target_pr_is_ready_to_terminate() -> None:
+    pr_url = f"https://github.com/{REPOSITORY}/pull/4"
+    result: dict[str, object] = {
+        "result": "pr_opened",
+        "summary": "Done",
+        "tests": [],
+        "commit_sha": "abc",
+        "pr_url": pr_url,
+        "failure_reason": None,
+    }
+    waiting = session(
+        status_detail="waiting_for_user",
+        structured_output=result,
+        pull_requests=[DevinPullRequest(pr_url=pr_url, pr_state="open")],
+    )
+    assert should_terminate_session(waiting, REPOSITORY) is True
+
+
+def test_working_session_is_not_terminated_early() -> None:
+    working = session(status_detail="working", structured_output={"result": "pr_opened"})
+    assert should_terminate_session(working, REPOSITORY) is False
+
+
+async def test_reconciler_terminates_completed_waiting_session(tmp_path: Path) -> None:
+    store = TaskStore(tmp_path / "tasks.db")
+    store.initialize()
+    task, _ = store.register("delivery-1", issue_payload())
+    assert store.claim_queued() is not None
+    store.attach_session(task.id, "devin-test", "https://app.devin.ai/sessions/devin-test")
+    pr_url = f"https://github.com/{REPOSITORY}/pull/4"
+    completed = session(
+        status_detail="waiting_for_user",
+        structured_output={
+            "result": "pr_opened",
+            "summary": "Done",
+            "tests": [],
+            "commit_sha": "abc",
+            "pr_url": pr_url,
+            "failure_reason": None,
+        },
+        pull_requests=[DevinPullRequest(pr_url=pr_url, pr_state="open")],
+    )
+    client = FakeDevinClient(REPOSITORY)
+    client.sessions["devin-test"] = (completed, 0)
+    await Orchestrator(store, client, Settings()).run_once()
+    updated = store.get(task.id)
+    assert updated is not None
+    assert updated.state == TaskState.COMPLETED_WITH_PR
 
 
 async def test_fake_client_progresses_to_target_pr() -> None:

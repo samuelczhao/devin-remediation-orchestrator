@@ -63,3 +63,24 @@ async def test_transport_failure_is_ambiguous(tmp_path: Path) -> None:
     with pytest.raises(AmbiguousCreateError):
         await client.create_session(create_task(tmp_path / "tasks.db"))
     await client.aclose()
+
+
+@respx.mock
+async def test_terminate_session_uses_organization_endpoint() -> None:
+    route = respx.delete(
+        "https://api.devin.ai/v3/organizations/org-test/sessions/devin-1"
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "session_id": "devin-1",
+                "url": "https://app.devin.ai/sessions/devin-1",
+                "status": "exit",
+            },
+        )
+    )
+    client = LiveDevinClient(live_settings())
+    session = await client.terminate_session("devin-1")
+    assert route.called
+    assert session.status == "exit"
+    await client.aclose()

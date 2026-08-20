@@ -49,6 +49,8 @@ class DevinClient(Protocol):
 
     async def find_session_by_tag(self, tag: str) -> DevinSession | None: ...
 
+    async def terminate_session(self, session_id: str) -> DevinSession: ...
+
     async def aclose(self) -> None: ...
 
 
@@ -87,6 +89,11 @@ class LiveDevinClient:
         self._raise(response)
         sessions = _parse_sessions(response.json().get("items", []))
         return next((session for session in sessions if tag in session.tags), None)
+
+    async def terminate_session(self, session_id: str) -> DevinSession:
+        response = await self.http.delete(f"{self.base_path}/{session_id}")
+        self._raise(response)
+        return DevinSession.model_validate(response.json())
 
     async def aclose(self) -> None:
         await self.http.aclose()
@@ -144,6 +151,12 @@ class FakeDevinClient:
         return next(
             (session for session, _ in self.sessions.values() if tag in session.tags), None
         )
+
+    async def terminate_session(self, session_id: str) -> DevinSession:
+        session, polls = self.sessions[session_id]
+        terminated = session.model_copy(update={"status": "exit", "status_detail": None})
+        self.sessions[session_id] = (terminated, polls)
+        return terminated
 
     async def aclose(self) -> None:
         return None

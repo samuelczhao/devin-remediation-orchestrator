@@ -140,6 +140,8 @@ repository, instructed not to merge, and constrained by protected `master`.
 - Every session receives a unique task tag. After an ambiguous create, the reconciler searches by
   that tag and never blindly repeats the paid create request.
 - Queued, creating, running, and attention-required tasks are reconciled after restart.
+- The reconciler terminates completed conversational sessions through Devin's official endpoint
+  after validating their result, preventing finished work from waiting indefinitely.
 - `exit` is not success. A successful task requires valid structured output and a PR URL for the
   allowlisted fork.
 - Waiting, suspended, blocked, API error, invalid-output, and wrong-repository outcomes remain
