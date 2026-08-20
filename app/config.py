@@ -6,6 +6,7 @@ from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_WEBHOOK_SECRET = "local-demo-secret"
+ENV_PREFIX = "REMEDIATION_"
 MIN_LIVE_SECRET_BYTES = 32
 SHIPPED_SECRET_PLACEHOLDERS = {
     DEFAULT_WEBHOOK_SECRET,
@@ -15,7 +16,11 @@ SHIPPED_SECRET_PLACEHOLDERS = {
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_prefix=ENV_PREFIX,
+        extra="ignore",
+    )
 
     app_mode: Literal["simulation", "live"] = "simulation"
     database_path: Path = Path("data/orchestrator.db")
@@ -42,17 +47,18 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_live_credentials(self) -> "Settings":
         if self.app_mode == "live" and not self.devin_api_key:
-            raise ValueError("DEVIN_API_KEY is required in live mode")
+            raise ValueError(f"{ENV_PREFIX}DEVIN_API_KEY is required in live mode")
         if self.app_mode == "live" and not self.devin_org_id:
-            raise ValueError("DEVIN_ORG_ID is required in live mode")
+            raise ValueError(f"{ENV_PREFIX}DEVIN_ORG_ID is required in live mode")
         if self.app_mode == "live":
             self._validate_live_secret(
-                "GITHUB_WEBHOOK_SECRET", self.github_webhook_secret.get_secret_value()
+                f"{ENV_PREFIX}GITHUB_WEBHOOK_SECRET",
+                self.github_webhook_secret.get_secret_value(),
             )
             if not self.control_plane_password:
-                raise ValueError("CONTROL_PLANE_PASSWORD is required in live mode")
+                raise ValueError(f"{ENV_PREFIX}CONTROL_PLANE_PASSWORD is required in live mode")
             self._validate_live_secret(
-                "CONTROL_PLANE_PASSWORD",
+                f"{ENV_PREFIX}CONTROL_PLANE_PASSWORD",
                 self.control_plane_password.get_secret_value(),
             )
         return self
@@ -66,7 +72,7 @@ class Settings(BaseSettings):
     @classmethod
     def validate_org_id(cls, value: str | None) -> str | None:
         if value and not value.startswith("org-"):
-            raise ValueError("DEVIN_ORG_ID must start with org-")
+            raise ValueError(f"{ENV_PREFIX}DEVIN_ORG_ID must start with org-")
         return value
 
 

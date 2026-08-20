@@ -27,7 +27,7 @@ return HTTP 202 `ignored_action` without creating a task.
 ## Verified locally on 2026-08-20
 
 - Typecheck: passed.
-- Tests: 77 passed.
+- Tests: 80 passed.
 - Lint: passed.
 - Simulation and explicit live-override Compose configurations: valid.
 - Image: built successfully and ran as UID 10001 with a read-only root filesystem.

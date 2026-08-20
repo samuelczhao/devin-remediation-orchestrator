@@ -10,7 +10,7 @@ from urllib.request import Request, urlopen
 from uuid import uuid4
 
 BASE_URL = os.getenv("BASE_URL", "http://127.0.0.1:8000")
-WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET", "local-demo-secret")
+DEFAULT_WEBHOOK_SECRET = "local-demo-secret"
 POLL_SECONDS = 0.25
 TIMEOUT_SECONDS = 15
 TERMINAL_STATES = {
@@ -20,6 +20,10 @@ TERMINAL_STATES = {
     "failed",
 }
 EXPECTED_REPOSITORY = "samuelczhao/superset"
+
+
+def webhook_secret() -> str:
+    return os.getenv("REMEDIATION_GITHUB_WEBHOOK_SECRET", DEFAULT_WEBHOOK_SECRET)
 
 
 def require_simulation_mode() -> None:
@@ -56,7 +60,7 @@ def payload() -> dict[str, object]:
 def request_json(path: str, *, body: bytes | None = None) -> Any:
     headers = {"accept": "application/json"}
     if body is not None:
-        digest = hmac.new(WEBHOOK_SECRET.encode(), body, hashlib.sha256).hexdigest()
+        digest = hmac.new(webhook_secret().encode(), body, hashlib.sha256).hexdigest()
         headers.update(
             {
                 "content-type": "application/json",

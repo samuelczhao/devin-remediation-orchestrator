@@ -3,6 +3,13 @@ import pytest
 from scripts import simulate_webhook
 
 
+def test_simulator_ignores_generic_webhook_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GITHUB_WEBHOOK_SECRET", "runner-owned-value")
+    monkeypatch.setenv("REMEDIATION_GITHUB_WEBHOOK_SECRET", "app-owned-value")
+
+    assert simulate_webhook.webhook_secret() == "app-owned-value"
+
+
 def test_simulator_refuses_live_backend(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         simulate_webhook,

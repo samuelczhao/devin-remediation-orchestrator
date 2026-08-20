@@ -99,7 +99,7 @@ this safety gate before spending ACUs:
 3. Keep `master` branch protection enabled. It currently requires one approval, enforces the rule
    for admins, and blocks force pushes and deletion.
 4. Store secrets outside the repository. The application fails closed in live mode when the API
-   key, organization ID, or non-default webhook secret is missing.
+   key, organization ID, non-default webhook secret, or control-plane password is missing.
 
 This project uses macOS Keychain locally:
 
@@ -116,17 +116,17 @@ security add-generic-password -U \
   -w "$control_plane_password"
 unset webhook_secret control_plane_password
 
-export DEVIN_API_KEY="$(security find-generic-password \
+export REMEDIATION_DEVIN_API_KEY="$(security find-generic-password \
   -s devin-remediation-orchestrator -a superset-remediation-bot -w)"
-export DEVIN_ORG_ID="$(security find-generic-password \
+export REMEDIATION_DEVIN_ORG_ID="$(security find-generic-password \
   -s devin-remediation-orchestrator-org-id -a superset-remediation-bot -w)"
-export GITHUB_WEBHOOK_SECRET="$(security find-generic-password \
+export REMEDIATION_GITHUB_WEBHOOK_SECRET="$(security find-generic-password \
   -s devin-remediation-orchestrator-webhook -a superset-remediation-bot -w)"
-export CONTROL_PLANE_PASSWORD="$(security find-generic-password \
+export REMEDIATION_CONTROL_PLANE_PASSWORD="$(security find-generic-password \
   -s devin-remediation-orchestrator-control-plane -a superset-remediation-bot -w)"
-export DEVIN_MAX_ACU_LIMIT=3
-export MAX_ACTIVE_SESSIONS=3
-export DEVIN_BYPASS_APPROVAL=false
+export REMEDIATION_DEVIN_MAX_ACU_LIMIT=3
+export REMEDIATION_MAX_ACTIVE_SESSIONS=3
+export REMEDIATION_DEVIN_BYPASS_APPROVAL=false
 docker compose -f compose.yaml -f compose.live.yaml up --build -d
 ```
 
@@ -137,9 +137,9 @@ verification, and only the Issues event. GitHub's
 is implemented over the raw body.
 
 In live mode, the dashboard and JSON APIs require HTTP Basic authentication with username
-`operator` and `CONTROL_PLANE_PASSWORD`; API documentation is disabled. Health checks remain
-public and contain no task data. The webhook route remains public but requires its independent
-HMAC secret.
+`operator` and `REMEDIATION_CONTROL_PLANE_PASSWORD`; API documentation is disabled. Health checks
+remain public and contain no task data. The webhook route remains public but requires its
+independent HMAC secret.
 
 Trigger a remediation by applying `devin:ready` once to a newly reviewed issue. The demonstrated
 issues are already labeled, and the durable `(repository_id, issue_id)` key deliberately prevents
