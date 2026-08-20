@@ -1,0 +1,11 @@
+services:
+  orchestrator:
+    environment:
+      APP_MODE: live
+      DATABASE_PATH: /data/live-orchestrator.db
+      DEVIN_API_KEY: "${DEVIN_API_KEY:?DEVIN_API_KEY is required}"
+      DEVIN_ORG_ID: "${DEVIN_ORG_ID:?DEVIN_ORG_ID is required}"
+      DEVIN_MAX_ACU_LIMIT: "${DEVIN_MAX_ACU_LIMIT:-3}"
+      DEVIN_BYPASS_APPROVAL: "${DEVIN_BYPASS_APPROVAL:-false}"
+      GITHUB_WEBHOOK_SECRET: "${GITHUB_WEBHOOK_SECRET:?GITHUB_WEBHOOK_SECRET is required}"
+      POLL_INTERVAL_SECONDS: "${POLL_INTERVAL_SECONDS:-15}"

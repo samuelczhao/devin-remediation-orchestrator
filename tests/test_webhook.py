@@ -50,6 +50,14 @@ def test_valid_webhook_is_accepted_and_deduplicated(tmp_path: Path) -> None:
         assert len(client.get("/api/tasks").json()) == 1
 
 
+def test_readiness_exposes_simulation_mode(tmp_path: Path) -> None:
+    settings = make_settings(tmp_path / "tasks.db")
+    with TestClient(create_app(settings)) as client:
+        response = client.get("/health/ready")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready", "mode": "simulation"}
+
+
 def test_invalid_signature_is_rejected(tmp_path: Path) -> None:
     settings = make_settings(tmp_path / "tasks.db")
     with TestClient(create_app(settings)) as client:

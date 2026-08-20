@@ -78,6 +78,14 @@ def test_finished_session_evaluates_terminal_result() -> None:
     assert observation.state == TaskState.COMPLETED_WITHOUT_PR
 
 
+def test_finished_session_with_invalid_result_needs_attention() -> None:
+    finished = session(status_detail="finished", structured_output=None)
+    observation = evaluate_session(finished, REPOSITORY)
+    assert observation.state == TaskState.NEEDS_ATTENTION
+    assert observation.error_code == "invalid_finished_result"
+    assert should_terminate_session(finished, REPOSITORY) is False
+
+
 def test_waiting_session_with_target_pr_is_ready_to_terminate() -> None:
     pr_url = f"https://github.com/{REPOSITORY}/pull/4"
     result: dict[str, object] = {
@@ -126,6 +134,30 @@ async def test_reconciler_terminates_completed_waiting_session(tmp_path: Path) -
     updated = store.get(task.id)
     assert updated is not None
     assert updated.state == TaskState.COMPLETED_WITH_PR
+
+
+async def test_reconciler_recovers_ambiguous_create_after_lookup_lag(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "tasks.db"
+    store = TaskStore(database_path)
+    store.initialize()
+    task, _ = store.register("delivery-1", issue_payload())
+    assert store.claim_queued() is not None
+    store.mark_create_unknown(task.id, "Initial tag lookup missed the session")
+    settings = Settings(ambiguous_recovery_interval_seconds=0)
+    client = FakeDevinClient(REPOSITORY)
+    recovered = session(tags=[f"remediation-task-{task.id}"])
+    client.sessions[recovered.session_id] = (recovered, 0)
+    restarted_store = TaskStore(database_path)
+    restarted_store.initialize()
+
+    await Orchestrator(restarted_store, client, settings).run_once()
+
+    updated = restarted_store.get(task.id)
+    assert updated is not None
+    assert updated.state == TaskState.RUNNING
+    assert updated.session_id == recovered.session_id
 
 
 async def test_fake_client_progresses_to_target_pr() -> None:

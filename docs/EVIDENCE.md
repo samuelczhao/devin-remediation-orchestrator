@@ -26,11 +26,13 @@ starting extra sessions.
 ## Verified locally on 2026-08-20
 
 - Typecheck: passed.
-- Tests: 37 passed.
+- Tests: 43 passed.
 - Lint: passed.
-- Compose configuration: valid.
+- Simulation and explicit live-override Compose configurations: valid.
 - Image: built successfully and ran as UID 10001 with a read-only root filesystem.
 - Container health: healthy.
+- Default Compose omitted Devin credentials even with ambient live variables; the simulator
+  accepted the isolated simulation backend and refused the live backend before posting.
 - Signed webhook simulation: `queued -> running -> completed_with_pr`.
 - Simulated observability: one PR / one terminal task, 1.00 PR yield, 1.25 simulated ACUs.
 - Repeated issue event: `created: false`; the original task/session was reused.

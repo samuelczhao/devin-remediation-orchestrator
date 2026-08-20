@@ -65,8 +65,11 @@ request. Every session uses the task ID in its title and tags. The reconciler se
 sessions for that tag before deciding that operator attention is required; it never blindly
 retries an ambiguous creation.
 
-On restart, the reconciler sweeps queued, creating, running, and needs-attention tasks. This is
-separate from request error handling because process termination can bypass in-process cleanup.
+On restart, the live reconciler sweeps queued, creating, running, and needs-attention tasks. An
+ambiguous create with no session ID repeats tag-only discovery after a 30-second backoff, so a
+session hidden by eventual-consistency lag can be recovered without ever repeating the POST. The
+fake adapter intentionally guarantees restart persistence only after its simulated task is
+terminal; its remote-session state is in memory.
 
 ## State model
 
@@ -79,8 +82,8 @@ queued -> creating -> running -> completed_with_pr
 
 - `new`, `claimed`, `running`, and `resuming` remain active.
 - `waiting_for_user` and `waiting_for_approval` require attention.
-- A finished session is terminated after its structured result is captured; a waiting session is
-  terminated only when it already has a valid terminal result and any claimed PR targets the fork.
+- A finished or waiting session is terminated only when it has a valid terminal result and any
+  claimed PR targets the fork. Invalid finished results stay attention-required.
 - `suspended` requires attention with its reason preserved.
 - `error` is a failed session.
 - `exit` is only lifecycle completion; it is not automatically business success.
@@ -103,14 +106,17 @@ The dashboard and JSON API expose:
 - median issue-to-PR cycle time and PR production rate;
 - safe error codes and status details.
 
-Logs are structured around delivery, task, issue, and session IDs. Tokens, signatures, raw bodies,
-issue bodies, and full prompts are never logged.
+The acceptance log records task and issue IDs; the SQLite event ledger records every state change,
+and per-task error codes preserve session failures. Tokens, signatures, raw bodies, issue bodies,
+and full prompts are never logged.
 
 ## Deliberate MVP limits
 
 - One application process and one reconciler. Production would use Postgres plus a dedicated
   worker and lease-based claims.
 - Local SQLite is durable for the demo but not a multi-replica queue.
+- The default Compose file is simulation-only. Live mode requires the explicit
+  `compose.live.yaml` override and all three credentials; the simulator also checks backend mode.
 - An HTTPS tunnel provides the live GitHub delivery; deterministic simulation remains available.
 - No auto-merge, issue-comment bot, authentication platform, frontend framework, or enterprise
   analytics are included.

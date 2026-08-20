@@ -73,6 +73,9 @@ class Orchestrator:
         if task.state == TaskState.CREATING:
             await self._recover_ambiguous(task)
             return
+        if self._ambiguous_recovery_due(task):
+            await self._recover_ambiguous(task)
+            return
         if not task.session_id:
             return
         try:
@@ -89,6 +92,14 @@ class Orchestrator:
         observation = evaluate_session(session, self.settings.github_repository)
         self.store.observe_session(task.id, **observation.__dict__)
 
+    def _ambiguous_recovery_due(self, task: TaskRecord) -> bool:
+        if task.state != TaskState.NEEDS_ATTENTION or task.session_id:
+            return False
+        if task.error_code != "session_create_unknown":
+            return False
+        elapsed = (datetime.now(UTC) - task.updated_at).total_seconds()
+        return elapsed >= self.settings.ambiguous_recovery_interval_seconds
+
 
 def evaluate_session(session: DevinSession, repository: str) -> SessionObservation:
     pr_url, pr_state = _target_pr(session, repository)
@@ -102,6 +113,13 @@ def evaluate_session(session: DevinSession, repository: str) -> SessionObservati
     if session.status_detail in {"waiting_for_user", "waiting_for_approval"}:
         return _with_error(base, TaskState.NEEDS_ATTENTION, "devin_waiting", session.status_detail)
     if session.status_detail == "finished":
+        if not _has_valid_terminal_result(session, repository):
+            return _with_error(
+                base,
+                TaskState.NEEDS_ATTENTION,
+                "invalid_finished_result",
+                "Finished session lacks valid output or a target-repository PR",
+            )
         return _evaluate_terminal(base, session.structured_output, pr_url)
     if session.status != "exit":
         return base
@@ -111,10 +129,12 @@ def evaluate_session(session: DevinSession, repository: str) -> SessionObservati
 def should_terminate_session(session: DevinSession, repository: str) -> bool:
     if session.status != "running":
         return False
-    if session.status_detail == "finished":
-        return True
-    if session.status_detail != "waiting_for_user":
+    if session.status_detail not in {"finished", "waiting_for_user"}:
         return False
+    return _has_valid_terminal_result(session, repository)
+
+
+def _has_valid_terminal_result(session: DevinSession, repository: str) -> bool:
     try:
         result = DevinResult.model_validate(session.structured_output)
     except ValidationError:

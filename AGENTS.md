@@ -15,3 +15,7 @@
 - A target PR plus passing agent-reported tests is an output signal, not a correctness signal.
   Review exact reserved-name collisions and production-database semantics; a broad "unrelated
   tags unchanged" test missed a same-name custom tag that would receive invalid associations.
+- Never let the default simulation Compose path inherit ambient live credentials or mode. Keep
+  live settings in an explicit override and make the simulator verify server mode before posting.
+- A tag lookup immediately after an ambiguous session POST can miss an eventually visible session.
+  Reconcile by repeating tag-only discovery with backoff; never repeat the paid create request.

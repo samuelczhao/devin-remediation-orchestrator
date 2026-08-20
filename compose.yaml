@@ -8,14 +8,10 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     environment:
-      APP_MODE: "${APP_MODE:-simulation}"
-      DATABASE_PATH: "${DATABASE_PATH:-/data/orchestrator.db}"
-      DEVIN_API_KEY:
-      DEVIN_ORG_ID:
-      DEVIN_MAX_ACU_LIMIT: "${DEVIN_MAX_ACU_LIMIT:-3}"
-      DEVIN_BYPASS_APPROVAL: "${DEVIN_BYPASS_APPROVAL:-false}"
-      GITHUB_WEBHOOK_SECRET: "${GITHUB_WEBHOOK_SECRET:-local-demo-secret}"
-      POLL_INTERVAL_SECONDS: "${POLL_INTERVAL_SECONDS:-2}"
+      APP_MODE: simulation
+      DATABASE_PATH: /data/orchestrator.db
+      GITHUB_WEBHOOK_SECRET: local-demo-secret
+      POLL_INTERVAL_SECONDS: "2"
     volumes:
       - orchestrator-data:/data
     tmpfs:

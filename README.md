@@ -5,6 +5,7 @@ coding session, then reconciles the result into a pull request and leadership-fa
 It never merges code.
 
 The challenge target is the public [Superset fork](https://github.com/samuelczhao/superset).
+Defects were inspected at fork commit `e7dccd44a7c212739147155548e689e9d6b3408f`.
 The selected defects are:
 
 - [#1: database export can silently drop same-named datasets](https://github.com/samuelczhao/superset/issues/1)
@@ -49,7 +50,9 @@ docker compose exec orchestrator /app/.venv/bin/python scripts/simulate_webhook.
 
 Open [http://127.0.0.1:8000](http://127.0.0.1:8000). The simulator signs a realistic
 `issues.labeled` payload and sends it through the production webhook path. The fake Devin adapter
-then follows the same persisted session lifecycle as live mode. Expected terminal evidence:
+then follows the same persisted session lifecycle as live mode. The default Compose file is fixed
+to simulation mode, passes no Devin credentials, and the simulator refuses any server that does
+not report `mode=simulation`. Expected terminal evidence:
 
 - task state `completed_with_pr`;
 - a target-repository PR URL;
@@ -57,7 +60,9 @@ then follows the same persisted session lifecycle as live mode. Expected termina
 - PR yield, cycle time, and cumulative ACUs in `/api/metrics`.
 
 Run the command again to demonstrate idempotency: `created` becomes `false`, and no second session
-is created. `docker compose restart` demonstrates that the task ledger survives a process restart.
+is created. After the task is terminal, `docker compose restart` demonstrates that its ledger,
+session link, PR link, metrics, and ACUs survive a process restart. The in-memory fake adapter is
+not intended to reconstruct an active simulated session across restart.
 
 ```bash
 docker compose down
@@ -110,11 +115,9 @@ export DEVIN_ORG_ID="$(security find-generic-password \
   -s devin-remediation-orchestrator-org-id -a superset-remediation-bot -w)"
 export GITHUB_WEBHOOK_SECRET="$(security find-generic-password \
   -s devin-remediation-orchestrator-webhook -a superset-remediation-bot -w)"
-export APP_MODE=live
-export DATABASE_PATH=/data/live-orchestrator.db
 export DEVIN_MAX_ACU_LIMIT=3
 export DEVIN_BYPASS_APPROVAL=false
-docker compose up --build -d
+docker compose -f compose.yaml -f compose.live.yaml up --build -d
 ```
 
 Expose `http://127.0.0.1:8000` through an HTTPS tunnel and add a repository webhook pointing to
@@ -123,14 +126,10 @@ verification, and only the Issues event. GitHub's
 [signature validation guidance](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries)
 is implemented over the raw body.
 
-Trigger the bounded remediations:
-
-```bash
-gh issue edit 1 --repo samuelczhao/superset --add-label devin:ready
-gh issue edit 2 --repo samuelczhao/superset --add-label devin:ready
-gh issue edit 3 --repo samuelczhao/superset --add-label devin:ready
-gh issue edit 7 --repo samuelczhao/superset --add-label devin:ready
-```
+Trigger a remediation by applying `devin:ready` once to a newly reviewed issue. The demonstrated
+issues are already labeled, and the durable `(repository_id, issue_id)` key deliberately prevents
+relabeling them from creating another session. The live delivery GUIDs are preserved in
+[the evidence](docs/EVIDENCE.md).
 
 Keep approvals enabled unless the Devin installation is repository-limited and an unattended
 demo is required. Even with approval bypass enabled, sessions are ACU-capped, limited to one
@@ -144,9 +143,11 @@ repository, instructed not to merge, and constrained by protected `master`.
   remote result ambiguous because the API exposes no idempotency key.
 - Every session receives a unique task tag. After an ambiguous create, the reconciler searches by
   that tag and never blindly repeats the paid create request.
-- Queued, creating, running, and attention-required tasks are reconciled after restart.
+- Live queued, creating, running, and attention-required tasks are reconciled after restart.
+- Ambiguous creates remain attention-required and repeat tag-only discovery every 30 seconds;
+  the paid create request is never repeated.
 - The reconciler terminates completed conversational sessions through Devin's official endpoint
-  after validating their result, preventing finished work from waiting indefinitely.
+  only after validating their structured result and any claimed target PR.
 - `exit` is not success. A successful task requires valid structured output and a PR URL for the
   allowlisted fork.
 - Waiting, suspended, blocked, API error, invalid-output, and wrong-repository outcomes remain

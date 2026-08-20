@@ -39,7 +39,8 @@ docker compose exec orchestrator /app/.venv/bin/python scripts/simulate_webhook.
 Show the dashboard move through queued/running/terminal states. Then open the issue #7 Devin
 session and PR #8. Explain the SQLAlchemy 2, portable concatenation, and transaction changes, then
 show the reserved-name regression test added after independent review. Do not call the simulated
-PR real; use it only to demonstrate repeatability when the live task is already done.
+PR real; use it only to demonstrate repeatability when the live task is already done. The command
+refuses to run if the backend reports live mode.
 
 ## 2:40–3:30 — Observability and failure behavior
 

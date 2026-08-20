@@ -7,7 +7,7 @@ from pydantic import SecretStr
 
 from app.config import Settings
 from app.database import TaskStore
-from app.devin_client import AmbiguousCreateError, LiveDevinClient, task_tag
+from app.devin_client import AmbiguousCreateError, DevinAPIError, LiveDevinClient, task_tag
 from app.schemas import TaskRecord
 from tests.factories import issue_payload
 
@@ -83,4 +83,15 @@ async def test_terminate_session_uses_organization_endpoint() -> None:
     session = await client.terminate_session("devin-1")
     assert route.called
     assert session.status == "exit"
+    await client.aclose()
+
+
+@respx.mock
+async def test_get_transport_failure_is_a_recoverable_api_error() -> None:
+    respx.get("https://api.devin.ai/v3/organizations/org-test/sessions/devin-1").mock(
+        side_effect=httpx.ReadError("connection dropped")
+    )
+    client = LiveDevinClient(live_settings())
+    with pytest.raises(DevinAPIError, match="transport failure"):
+        await client.get_session("devin-1")
     await client.aclose()
