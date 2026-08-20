@@ -62,7 +62,8 @@ not report `mode=simulation`. Expected terminal evidence:
 Run the command again to demonstrate idempotency: `created` becomes `false`, and no second session
 is created. After the task is terminal, `docker compose restart` demonstrates that its ledger,
 session link, PR link, metrics, and ACUs survive a process restart. The in-memory fake adapter is
-not intended to reconstruct an active simulated session across restart.
+deterministic: if restart occurs while a simulated task is active, it reconstructs that task's
+fake remote session from the persisted session ID and continues to terminal state.
 
 ```bash
 docker compose down
@@ -80,10 +81,11 @@ uv sync
 make quality
 ```
 
-The suite covers signature verification, request bounds, stable repo and actor allowlists,
-delivery/issue deduplication, ambiguous create recovery, Devin lifecycle mapping, structured
-output validation, target-PR validation, metrics, HTML escaping, and full simulated issue-to-PR
-progression.
+The suite covers signature verification, realistic ignored GitHub actions, request bounds, stable
+repo and actor allowlists, delivery/issue deduplication, paginated ambiguous-create recovery,
+malformed-response isolation, active-session restart, Devin lifecycle mapping, strict structured
+output/target-PR validation, operator authentication, metrics, HTML escaping, and full simulated
+issue-to-PR progression. GitHub Actions runs the same typecheck → tests → lint gate.
 
 ## Live mode
 
@@ -103,11 +105,16 @@ This project uses macOS Keychain locally:
 
 ```bash
 webhook_secret="$(openssl rand -hex 32)"
+control_plane_password="$(openssl rand -hex 32)"
 security add-generic-password -U \
   -s devin-remediation-orchestrator-webhook \
   -a superset-remediation-bot \
   -w "$webhook_secret"
-unset webhook_secret
+security add-generic-password -U \
+  -s devin-remediation-orchestrator-control-plane \
+  -a superset-remediation-bot \
+  -w "$control_plane_password"
+unset webhook_secret control_plane_password
 
 export DEVIN_API_KEY="$(security find-generic-password \
   -s devin-remediation-orchestrator -a superset-remediation-bot -w)"
@@ -115,7 +122,10 @@ export DEVIN_ORG_ID="$(security find-generic-password \
   -s devin-remediation-orchestrator-org-id -a superset-remediation-bot -w)"
 export GITHUB_WEBHOOK_SECRET="$(security find-generic-password \
   -s devin-remediation-orchestrator-webhook -a superset-remediation-bot -w)"
+export CONTROL_PLANE_PASSWORD="$(security find-generic-password \
+  -s devin-remediation-orchestrator-control-plane -a superset-remediation-bot -w)"
 export DEVIN_MAX_ACU_LIMIT=3
+export MAX_ACTIVE_SESSIONS=3
 export DEVIN_BYPASS_APPROVAL=false
 docker compose -f compose.yaml -f compose.live.yaml up --build -d
 ```
@@ -125,6 +135,11 @@ Expose `http://127.0.0.1:8000` through an HTTPS tunnel and add a repository webh
 verification, and only the Issues event. GitHub's
 [signature validation guidance](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries)
 is implemented over the raw body.
+
+In live mode, the dashboard and JSON APIs require HTTP Basic authentication with username
+`operator` and `CONTROL_PLANE_PASSWORD`; API documentation is disabled. Health checks remain
+public and contain no task data. The webhook route remains public but requires its independent
+HMAC secret.
 
 Trigger a remediation by applying `devin:ready` once to a newly reviewed issue. The demonstrated
 issues are already labeled, and the durable `(repository_id, issue_id)` key deliberately prevents
@@ -142,7 +157,12 @@ repository, instructed not to merge, and constrained by protected `master`.
 - Session creation is not falsely described as exactly-once: a network timeout can make the
   remote result ambiguous because the API exposes no idempotency key.
 - Every session receives a unique task tag. After an ambiguous create, the reconciler searches by
-  that tag and never blindly repeats the paid create request.
+  that tag across cursor-paginated results and never blindly repeats the paid create request.
+- An atomic active-session limit bounds concurrent ACU exposure; the human label remains the
+  authorization and aggregate-budget gate for this demo.
+- HTTP 429 create responses are retried only after a configured backoff. Before retrying, the task
+  is durably reclaimed as `creating`, so a crash triggers tag recovery instead of another POST;
+  authentication, authorization, and validation failures remain terminal.
 - Live queued, creating, running, and attention-required tasks are reconciled after restart.
 - Ambiguous creates remain attention-required and repeat tag-only discovery every 30 seconds;
   the paid create request is never repeated.
@@ -152,6 +172,15 @@ repository, instructed not to merge, and constrained by protected `master`.
   allowlisted fork.
 - Waiting, suspended, blocked, API error, invalid-output, and wrong-repository outcomes remain
   distinguishable.
+- A malformed response for one task cannot prevent later tasks in the same sweep from progressing.
+- Validated terminal evidence is persisted as `session_termination_pending` before the cleanup
+  call. Success transitions terminal without trusting a stale DELETE body; failure or process
+  death retains the PR/output evidence and remains retryable.
+
+Sessionless ambiguous creates count against the active limit on purpose: the service cannot know
+whether a paid remote session exists. If the limit fills with unresolved ambiguous tasks, intake
+stops as a visible fail-closed circuit breaker. This MVP does not provide an automated “abandon”
+button because retrying without a human verifying Devin's session list could duplicate spend.
 
 The Devin API client follows the official
 [session status endpoint](https://docs.devin.ai/api-reference/v3/sessions/get-organizations-session).
@@ -167,11 +196,14 @@ The dashboard and `/api/metrics` answer whether the workflow is operating:
 - median issue-to-terminal cycle time;
 - cumulative ACUs;
 - per-task links to the source issue, Devin session, and PR;
-- worker health plus safe error/status fields.
+- Devin-reported test counts, session-time PR state, and per-task error detail;
+- current worker attempt/healthy timestamps plus stale/error-aware readiness.
 
 PR yield is intentionally not labeled “success rate.” Devin-reported test commands are agent
 claims until confirmed by the PR's CI and reviewer inspection. The submission reports observed
 results from a small live sample rather than generalized productivity claims.
+The MVP does not yet ingest current GitHub PR, review, or Superset CI state; the evidence table and
+SHA-pinned review report carry those separate quality outcomes.
 
 ## Observed live result
 
@@ -187,6 +219,7 @@ so exact session-reported tests and independent review limits remain explicit in
 ## Evidence and presentation
 
 - [Implementation evidence](docs/EVIDENCE.md)
+- [SHA-pinned remediation review report](docs/REVIEW_REPORTS.md)
 - [Five-minute Loom runbook](docs/LOOM_SCRIPT.md)
 - [Issue #1 technical specification](docs/issues/database-export-dataset-collision.md)
 - [Issue #2 technical specification](docs/issues/sync-tags-favorite-type.md)

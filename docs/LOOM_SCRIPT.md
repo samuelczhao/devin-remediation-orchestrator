@@ -33,7 +33,10 @@ Open `app/github_webhook.py`, `app/devin_client.py`, and `app/orchestrator.py`. 
 Show a GitHub webhook delivery or replay the deterministic Docker simulation:
 
 ```bash
-docker compose exec orchestrator /app/.venv/bin/python scripts/simulate_webhook.py
+docker compose down
+docker compose -p devin-demo down --volumes
+docker compose -p devin-demo up --build -d
+docker compose -p devin-demo exec orchestrator /app/.venv/bin/python scripts/simulate_webhook.py
 ```
 
 Show the dashboard move through queued/running/terminal states. Then open the issue #7 Devin
@@ -41,6 +44,10 @@ session and PR #8. Explain the SQLAlchemy 2, portable concatenation, and transac
 show the reserved-name regression test added after independent review. Do not call the simulated
 PR real; use it only to demonstrate repeatability when the live task is already done. The command
 refuses to run if the backend reports live mode.
+The isolated `devin-demo` project starts with a fresh disposable volume, so the recording shows
+queued → running → terminal instead of immediately deduplicating an earlier simulation. Run
+`docker compose -p devin-demo down --volumes` after recording; it does not remove the preserved
+live-evidence volume from the default Compose project.
 
 ## 2:40–3:30 — Observability and failure behavior
 
