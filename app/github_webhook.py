@@ -5,7 +5,7 @@ from uuid import UUID
 from pydantic import ValidationError
 
 from app.config import Settings
-from app.schemas import IssueLabeledPayload
+from app.schemas import GitHubIssueEventEnvelope, IssueLabeledPayload
 from app.security import verify_signature
 
 
@@ -34,6 +34,9 @@ def validate_webhook(
     delivery_id = _delivery_id(headers.get("x-github-delivery"))
     if headers.get("x-github-event") != "issues":
         return WebhookDecision(delivery_id, None, "ignored_event")
+    envelope = _parse_envelope(raw_body)
+    if envelope.action != "labeled":
+        return WebhookDecision(delivery_id, None, "ignored_action")
     payload = _parse(raw_body)
     reason = _ignored_reason(payload, settings)
     if reason:
@@ -60,6 +63,13 @@ def _parse(raw_body: bytes) -> IssueLabeledPayload:
         return IssueLabeledPayload.model_validate_json(raw_body)
     except ValidationError as error:
         raise WebhookError(400, "Invalid issues webhook payload") from error
+
+
+def _parse_envelope(raw_body: bytes) -> GitHubIssueEventEnvelope:
+    try:
+        return GitHubIssueEventEnvelope.model_validate_json(raw_body)
+    except ValidationError as error:
+        raise WebhookError(400, "Invalid issues webhook envelope") from error
 
 
 def _ignored_reason(payload: IssueLabeledPayload, settings: Settings) -> str | None:

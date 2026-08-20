@@ -24,12 +24,16 @@ p { color: #aeb8c7; }
 .panel { border-radius: 18px; padding: 24px; }
 .panel-heading { align-items: end; margin-bottom: 20px; }
 .panel-heading > span, .footnote { color: #7f8da2; font-size: 12px; }
+.worker-health { display: grid; gap: 4px; color: #7f8da2; font-size: 12px; text-align: right; }
+.worker-health strong { color: #ffadb7; }
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
 th, td { padding: 15px 12px; border-bottom: 1px solid #222b38; text-align: left; font-size: 13px; }
 th { color: #7f8da2; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
 a { color: #a8c7ff; text-decoration: none; }
 a:hover { text-decoration: underline; }
+td small { display: block; margin-top: 4px; color: #7f8da2; line-height: 1.35; }
+td > strong { color: #ffadb7; font-size: 12px; }
 .status { background: #273143; color: #c6d2e3; }
 .status.failed, .status.blocked { background: #492027; color: #ffadb7; }
 .status.needs_attention { background: #493b18; color: #f4d77b; }
@@ -39,4 +43,5 @@ a:hover { text-decoration: underline; }
 @media (max-width: 800px) {
   .metrics { grid-template-columns: repeat(2, 1fr); }
   header, .panel-heading { flex-direction: column; }
+  .worker-health { text-align: left; }
 }

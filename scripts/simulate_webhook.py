@@ -5,7 +5,7 @@ import json
 import os
 import time
 from typing import Any, cast
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
@@ -19,6 +19,7 @@ TERMINAL_STATES = {
     "completed_without_pr",
     "failed",
 }
+EXPECTED_REPOSITORY = "samuelczhao/superset"
 
 
 def require_simulation_mode() -> None:
@@ -26,7 +27,7 @@ def require_simulation_mode() -> None:
     while time.monotonic() < deadline:
         try:
             health = request_json("/health/ready")
-        except RuntimeError:
+        except (RuntimeError, URLError):
             time.sleep(POLL_SECONDS)
             continue
         if health.get("mode") != "simulation":
@@ -82,11 +83,7 @@ def wait_for_terminal(task_id: str) -> dict[str, Any]:
         if not isinstance(tasks, list):
             raise RuntimeError("Task API returned a non-list response")
         task = next(
-            (
-                item
-                for item in tasks
-                if isinstance(item, dict) and item.get("id") == task_id
-            ),
+            (item for item in tasks if isinstance(item, dict) and item.get("id") == task_id),
             None,
         )
         if task is None:
@@ -103,10 +100,35 @@ def main() -> None:
     require_simulation_mode()
     raw = json.dumps(payload(), separators=(",", ":")).encode()
     accepted = request_json("/webhooks/github", body=raw)
+    if not isinstance(accepted, dict) or not isinstance(accepted.get("task_id"), str):
+        raise RuntimeError("Webhook response did not include a task ID")
     print(json.dumps(accepted, indent=2))
     task = wait_for_terminal(accepted["task_id"])
     metrics = request_json("/api/metrics")
+    validate_success(task, metrics)
     print(json.dumps({"task": task, "metrics": metrics}, indent=2))
+
+
+def validate_success(task: dict[str, Any], metrics: object) -> None:
+    if task.get("state") != "completed_with_pr":
+        raise RuntimeError(f"Simulation ended in {task.get('state')}, not completed_with_pr")
+    pr_url = task.get("pr_url")
+    if not isinstance(pr_url, str) or not pr_url.startswith(
+        f"https://github.com/{EXPECTED_REPOSITORY}/pull/"
+    ):
+        raise RuntimeError("Simulation did not produce a target-repository PR")
+    output = task.get("structured_output")
+    if not isinstance(output, dict) or output.get("result") != "pr_opened":
+        raise RuntimeError("Simulation did not return a pr_opened structured result")
+    tests = output.get("tests")
+    if not isinstance(tests, list) or not any(
+        isinstance(test, dict) and test.get("outcome") == "passed" for test in tests
+    ):
+        raise RuntimeError("Simulation did not report a passing test")
+    if not isinstance(metrics, dict):
+        raise RuntimeError("Metrics API returned a non-object response")
+    if metrics.get("pr_produced") != 1 or metrics.get("failed") != 0:
+        raise RuntimeError("Simulation metrics do not show one clean PR-producing task")
 
 
 if __name__ == "__main__":

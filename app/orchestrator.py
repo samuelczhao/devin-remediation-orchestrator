@@ -1,5 +1,6 @@
 import logging
 import re
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -8,7 +9,13 @@ from pydantic import ValidationError
 
 from app.config import Settings
 from app.database import TaskStore
-from app.devin_client import AmbiguousCreateError, DevinAPIError, DevinClient, task_tag
+from app.devin_client import (
+    AmbiguousCreateError,
+    DevinAPIError,
+    DevinClient,
+    RateLimitedCreateError,
+    task_tag,
+)
 from app.schemas import DevinResult, DevinSession, TaskRecord, TaskState
 
 logger = logging.getLogger(__name__)
@@ -33,72 +40,138 @@ class Orchestrator:
         self.store = store
         self.client = client
         self.settings = settings
+        self.last_run_at: datetime | None = None
         self.last_successful_run: datetime | None = None
         self.last_error: str | None = None
 
     async def run_once(self) -> None:
+        healthy = True
+        self.last_run_at = datetime.now(UTC)
         try:
-            task = self.store.claim_queued()
-            if task:
-                await self._create(task)
+            for _ in range(self.settings.max_active_sessions):
+                task = self.store.claim_queued(self.settings.max_active_sessions)
+                if not task:
+                    break
+                healthy = await self._run_task(task, self._create) and healthy
             for active in self.store.list_active():
-                await self._reconcile(active)
-            self.last_successful_run = datetime.now(UTC)
-            self.last_error = None
+                healthy = await self._run_task(active, self._reconcile) and healthy
         except Exception:
-            self.last_error = "unexpected_reconciler_error"
-            logger.exception("reconciler_failed")
+            healthy = False
+            logger.exception("reconciler_sweep_failed")
+        self.last_run_at = datetime.now(UTC)
+        if healthy:
+            self.last_successful_run = self.last_run_at
+            self.last_error = None
+        else:
+            self.last_error = "reconciliation_errors"
 
-    async def _create(self, task: TaskRecord) -> None:
+    async def _run_task(
+        self,
+        task: TaskRecord,
+        operation: Callable[[TaskRecord], Awaitable[bool]],
+    ) -> bool:
+        self.last_run_at = datetime.now(UTC)
+        try:
+            return await operation(task)
+        except Exception:
+            logger.exception("task_reconciliation_failed", extra={"task_id": task.id})
+            try:
+                self.store.record_error(
+                    task.id,
+                    "unexpected_task_error",
+                    "Unexpected task reconciliation error",
+                )
+            except Exception:
+                logger.exception("task_error_record_failed", extra={"task_id": task.id})
+            return False
+
+    async def _create(self, task: TaskRecord) -> bool:
         try:
             session = await self.client.create_session(task)
         except AmbiguousCreateError:
-            await self._recover_ambiguous(task)
+            return await self._recover_ambiguous(task)
+        except RateLimitedCreateError as error:
+            self.store.mark_needs_attention(
+                task.id,
+                "session_create_rate_limited",
+                str(error),
+            )
+            return False
         except DevinAPIError as error:
             self.store.mark_failed(task.id, "session_create_failed", str(error))
+            return True
         else:
             self.store.attach_session(task.id, session.session_id, session.url)
+            return True
 
-    async def _recover_ambiguous(self, task: TaskRecord) -> None:
+    async def _recover_ambiguous(self, task: TaskRecord) -> bool:
         try:
-            session = await self.client.find_session_by_tag(task_tag(task.id))
-        except DevinAPIError:
-            session = None
+            session = await self.client.find_session_by_tag(task_tag(task.id), task.created_at)
+        except DevinAPIError as error:
+            detail = "Paid create not retried; tagged-session discovery failed"
+            if task.state == TaskState.CREATING:
+                self.store.mark_create_unknown(task.id, detail)
+            else:
+                self.store.record_error(task.id, "session_lookup_failed", str(error))
+            return False
         if session:
             self.store.attach_session(task.id, session.session_id, session.url)
-            return
-        self.store.mark_create_unknown(task.id, "Creation outcome unknown; no retry attempted")
+            return True
+        self.store.mark_create_unknown(
+            task.id,
+            "Creation outcome unknown; paid create not retried; tag discovery will repeat",
+        )
+        return True
 
-    async def _reconcile(self, task: TaskRecord) -> None:
+    async def _reconcile(self, task: TaskRecord) -> bool:
         if task.state == TaskState.CREATING:
-            await self._recover_ambiguous(task)
-            return
+            return await self._recover_ambiguous(task)
+        if self._create_retry_due(task):
+            retry = self.store.prepare_create_retry(task.id)
+            return await self._create(retry)
         if self._ambiguous_recovery_due(task):
-            await self._recover_ambiguous(task)
-            return
+            return await self._recover_ambiguous(task)
         if not task.session_id:
-            return
+            return True
         try:
             session = await self.client.get_session(task.session_id)
         except DevinAPIError as error:
             self.store.record_error(task.id, "session_poll_failed", str(error))
-            return
+            return False
         if should_terminate_session(session, self.settings.github_repository):
+            observation = _terminal_observation(session, self.settings.github_repository)
+            pending = _termination_pending_observation(session, self.settings.github_repository)
+            self.store.observe_session(task.id, **pending.__dict__)
             try:
-                session = await self.client.terminate_session(task.session_id)
+                await self.client.terminate_session(task.session_id)
             except DevinAPIError as error:
-                self.store.record_error(task.id, "session_terminate_failed", str(error))
-                return
-        observation = evaluate_session(session, self.settings.github_repository)
+                observation = _termination_failure_observation(
+                    session,
+                    self.settings.github_repository,
+                    str(error),
+                )
+                self.store.observe_session(task.id, **observation.__dict__)
+                return False
+        else:
+            observation = evaluate_session(session, self.settings.github_repository)
         self.store.observe_session(task.id, **observation.__dict__)
+        return True
 
     def _ambiguous_recovery_due(self, task: TaskRecord) -> bool:
         if task.state != TaskState.NEEDS_ATTENTION or task.session_id:
             return False
-        if task.error_code != "session_create_unknown":
+        if task.error_code not in {"session_create_unknown", "session_lookup_failed"}:
             return False
         elapsed = (datetime.now(UTC) - task.updated_at).total_seconds()
         return elapsed >= self.settings.ambiguous_recovery_interval_seconds
+
+    def _create_retry_due(self, task: TaskRecord) -> bool:
+        if task.state != TaskState.NEEDS_ATTENTION or task.session_id:
+            return False
+        if task.error_code != "session_create_rate_limited":
+            return False
+        elapsed = (datetime.now(UTC) - task.updated_at).total_seconds()
+        return elapsed >= self.settings.create_retry_interval_seconds
 
 
 def evaluate_session(session: DevinSession, repository: str) -> SessionObservation:
@@ -112,18 +185,26 @@ def evaluate_session(session: DevinSession, repository: str) -> SessionObservati
         )
     if session.status_detail in {"waiting_for_user", "waiting_for_approval"}:
         return _with_error(base, TaskState.NEEDS_ATTENTION, "devin_waiting", session.status_detail)
+    result = _terminal_result(session, repository)
     if session.status_detail == "finished":
-        if not _has_valid_terminal_result(session, repository):
+        if not result:
             return _with_error(
                 base,
                 TaskState.NEEDS_ATTENTION,
                 "invalid_finished_result",
                 "Finished session lacks valid output or a target-repository PR",
             )
-        return _evaluate_terminal(base, session.structured_output, pr_url)
+        return _evaluate_terminal(base, result, pr_url)
     if session.status != "exit":
         return base
-    return _evaluate_terminal(base, session.structured_output, pr_url)
+    if not result:
+        return _with_error(
+            base,
+            TaskState.FAILED,
+            "invalid_structured_output",
+            "Missing, contradictory, or invalid terminal result",
+        )
+    return _evaluate_terminal(base, result, pr_url)
 
 
 def should_terminate_session(session: DevinSession, repository: str) -> bool:
@@ -135,27 +216,31 @@ def should_terminate_session(session: DevinSession, repository: str) -> bool:
 
 
 def _has_valid_terminal_result(session: DevinSession, repository: str) -> bool:
+    return _terminal_result(session, repository) is not None
+
+
+def _terminal_result(session: DevinSession, repository: str) -> DevinResult | None:
     try:
         result = DevinResult.model_validate(session.structured_output)
     except ValidationError:
-        return False
-    return result.result != "pr_opened" or _target_pr(session, repository)[0] is not None
+        return None
+    pr_url, pr_state = _target_pr(session, repository)
+    if result.result == "pr_opened":
+        valid_pr = (
+            len(session.pull_requests) == 1
+            and result.pr_url == pr_url
+            and pr_state is not None
+            and pr_state.casefold() == "open"
+        )
+        return result if valid_pr else None
+    return result if not session.pull_requests else None
 
 
 def _evaluate_terminal(
     base: SessionObservation,
-    structured_output: dict[str, object] | None,
+    result: DevinResult,
     pr_url: str | None,
 ) -> SessionObservation:
-    try:
-        result = DevinResult.model_validate(structured_output)
-    except ValidationError:
-        return _with_error(
-            base,
-            TaskState.FAILED,
-            "invalid_structured_output",
-            "Missing or invalid result",
-        )
     if result.result == "pr_opened" and pr_url:
         return _with_state(base, TaskState.COMPLETED_WITH_PR)
     if result.result == "blocked":
@@ -164,6 +249,40 @@ def _evaluate_terminal(
         return _with_state(base, TaskState.COMPLETED_WITHOUT_PR)
     detail = result.failure_reason or "Terminal session did not produce a target-repository PR"
     return _with_error(base, TaskState.FAILED, "remediation_failed", detail)
+
+
+def _terminal_observation(session: DevinSession, repository: str) -> SessionObservation:
+    terminal = session.model_copy(update={"status": "exit", "status_detail": "finished"})
+    return evaluate_session(terminal, repository)
+
+
+def _termination_failure_observation(
+    session: DevinSession,
+    repository: str,
+    detail: str,
+) -> SessionObservation:
+    pr_url, pr_state = _target_pr(session, repository)
+    base = _base_observation(session, pr_url, pr_state)
+    return _with_error(
+        base,
+        TaskState.NEEDS_ATTENTION,
+        "session_terminate_failed",
+        detail,
+    )
+
+
+def _termination_pending_observation(
+    session: DevinSession,
+    repository: str,
+) -> SessionObservation:
+    pr_url, pr_state = _target_pr(session, repository)
+    base = _base_observation(session, pr_url, pr_state)
+    return _with_error(
+        base,
+        TaskState.NEEDS_ATTENTION,
+        "session_termination_pending",
+        "Validated result persisted; Devin session termination pending",
+    )
 
 
 def _base_observation(

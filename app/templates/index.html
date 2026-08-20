@@ -3,6 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="refresh" content="5">
     <title>Devin Remediation Control Plane</title>
     <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
   </head>
@@ -19,13 +20,16 @@
 
       <section class="metrics" aria-label="Workflow metrics">
         <article><strong>{{ metrics.total }}</strong><span>Accepted</span></article>
+        <article><strong>{{ metrics.queued }}</strong><span>Queued</span></article>
         <article><strong>{{ metrics.active }}</strong><span>Active</span></article>
         <article><strong>{{ metrics.needs_attention }}</strong><span>Needs attention</span></article>
         <article><strong>{{ metrics.blocked }}</strong><span>Blocked</span></article>
         <article><strong>{{ metrics.failed }}</strong><span>Failed</span></article>
         <article><strong>{{ metrics.pr_produced }}</strong><span>PRs produced</span></article>
         <article><strong>{{ metrics.pr_yield }}</strong><span>PR yield</span></article>
-        <article><strong>{{ metrics.total_acus }}</strong><span>Total ACUs</span></article>
+        <article><strong>{{ metrics.terminal }}</strong><span>Terminal</span></article>
+        <article><strong>{{ metrics.total_acus }}</strong><span>API-reported ACUs</span></article>
+        <article><strong>{{ median_cycle }}</strong><span>Median cycle</span></article>
       </section>
 
       <section class="panel">
@@ -34,25 +38,31 @@
             <p class="eyebrow">Live task ledger</p>
             <h2>Issue-to-PR progress</h2>
           </div>
-          <span>Last reconciliation: {{ worker_last_run or "starting" }}</span>
+          <div class="worker-health">
+            <span>Last attempt: {{ worker_last_attempt or "starting" }}</span>
+            <span>Last healthy: {{ worker_last_run or "starting" }}</span>
+            {% if worker_last_error %}<strong>Worker error: {{ worker_last_error }}</strong>{% endif %}
+          </div>
         </div>
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Issue</th><th>State</th><th>Devin</th><th>PR</th><th>ACUs</th><th>Updated</th></tr>
+              <tr><th>Issue</th><th>Workflow</th><th>Devin</th><th>PR artifact</th><th>Devin tests</th><th>Error</th><th>ACUs</th><th>Updated</th></tr>
             </thead>
             <tbody>
               {% for task in tasks %}
               <tr>
                 <td><a href="{{ task.issue_url }}">#{{ task.issue_number }} {{ task.issue_title }}</a></td>
-                <td><span class="status {{ task.state }}">{{ task.state }}</span></td>
+                <td><span class="status {{ task.state }}">{{ task.state_label }}</span></td>
                 <td>{% if task.session_url %}<a href="{{ task.session_url }}">Session</a>{% else %}—{% endif %}</td>
-                <td>{% if task.pr_url %}<a href="{{ task.pr_url }}">Pull request</a>{% else %}—{% endif %}</td>
-                <td>{{ task.acus_consumed }}</td>
-                <td>{{ task.updated_at }}</td>
+                <td>{% if task.pr_url %}<a href="{{ task.pr_url }}">Pull request</a><small>{{ task.pr_state or "state unavailable" }} at session completion</small>{% else %}—{% endif %}</td>
+                <td>{{ task.test_summary }}</td>
+                <td>{% if task.error_code %}<strong>{{ task.error_code }}</strong><small>{{ task.error_detail }}</small>{% else %}—{% endif %}</td>
+                <td>{{ task.acus_consumed }} reported</td>
+                <td>{{ task.updated_display }}</td>
               </tr>
               {% else %}
-              <tr><td colspan="6" class="empty">No accepted remediation tasks yet.</td></tr>
+              <tr><td colspan="8" class="empty">No accepted remediation tasks yet.</td></tr>
               {% endfor %}
             </tbody>
           </table>
