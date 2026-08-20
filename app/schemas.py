@@ -11,6 +11,7 @@ class TaskState(StrEnum):
     CREATING = "creating"
     RUNNING = "running"
     NEEDS_ATTENTION = "needs_attention"
+    BLOCKED = "blocked"
     COMPLETED_WITH_PR = "completed_with_pr"
     COMPLETED_WITHOUT_PR = "completed_without_pr"
     FAILED = "failed"
@@ -66,6 +67,7 @@ class DevinSession(BaseModel):
     acus_consumed: Decimal = Decimal("0")
     pull_requests: list[DevinPullRequest] = Field(default_factory=list)
     structured_output: dict[str, Any] | None = None
+    tags: list[str] = Field(default_factory=list)
 
 
 class DevinTestResult(BaseModel):

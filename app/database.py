@@ -188,6 +188,24 @@ class TaskStore:
                 ("session_create_unknown", detail, task_id),
             )
 
+    def mark_failed(self, task_id: str, code: str, detail: str) -> None:
+        with self._connect() as connection:
+            task = self._get(connection, task_id)
+            self._transition(connection, task, TaskState.FAILED, detail)
+            connection.execute(
+                """UPDATE tasks SET error_code = ?, error_detail = ?, completed_at = ?
+                WHERE id = ?""",
+                (code, detail, _now(), task_id),
+            )
+
+    def record_error(self, task_id: str, code: str, detail: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """UPDATE tasks SET error_code = ?, error_detail = ?, updated_at = ?
+                WHERE id = ?""",
+                (code, detail, _now(), task_id),
+            )
+
     def list_active(self) -> list[TaskRecord]:
         active = (TaskState.RUNNING, TaskState.CREATING, TaskState.NEEDS_ATTENTION)
         with self._connect() as connection:
@@ -254,6 +272,7 @@ def _terminal_states() -> set[TaskState]:
     return {
         TaskState.COMPLETED_WITH_PR,
         TaskState.COMPLETED_WITHOUT_PR,
+        TaskState.BLOCKED,
         TaskState.FAILED,
     }
 
