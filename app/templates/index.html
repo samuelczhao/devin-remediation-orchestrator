@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Devin Remediation Control Plane</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <p class="eyebrow">Engineering maintenance automation</p>
+          <h1>Devin Remediation Control Plane</h1>
+          <p>Trusted GitHub issue events become bounded, observable coding sessions.</p>
+        </div>
+        <span class="mode {{ mode }}">{{ mode | upper }}</span>
+      </header>
+
+      <section class="metrics" aria-label="Workflow metrics">
+        <article><strong>{{ metrics.total }}</strong><span>Accepted</span></article>
+        <article><strong>{{ metrics.active }}</strong><span>Active</span></article>
+        <article><strong>{{ metrics.needs_attention }}</strong><span>Needs attention</span></article>
+        <article><strong>{{ metrics.blocked }}</strong><span>Blocked</span></article>
+        <article><strong>{{ metrics.failed }}</strong><span>Failed</span></article>
+        <article><strong>{{ metrics.pr_produced }}</strong><span>PRs produced</span></article>
+        <article><strong>{{ metrics.pr_yield }}</strong><span>PR yield</span></article>
+        <article><strong>{{ metrics.total_acus }}</strong><span>Total ACUs</span></article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Live task ledger</p>
+            <h2>Issue-to-PR progress</h2>
+          </div>
+          <span>Last reconciliation: {{ worker_last_run or "starting" }}</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Issue</th><th>State</th><th>Devin</th><th>PR</th><th>ACUs</th><th>Updated</th></tr>
+            </thead>
+            <tbody>
+              {% for task in tasks %}
+              <tr>
+                <td><a href="{{ task.issue_url }}">#{{ task.issue_number }} {{ task.issue_title }}</a></td>
+                <td><span class="status {{ task.state }}">{{ task.state }}</span></td>
+                <td>{% if task.session_url %}<a href="{{ task.session_url }}">Session</a>{% else %}—{% endif %}</td>
+                <td>{% if task.pr_url %}<a href="{{ task.pr_url }}">Pull request</a>{% else %}—{% endif %}</td>
+                <td>{{ task.acus_consumed }}</td>
+                <td>{{ task.updated_at }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="6" class="empty">No accepted remediation tasks yet.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="footnote">PR yield measures workflow output, not correctness. Test results in session output are Devin-reported until independently confirmed by CI.</p>
+      </section>
+    </main>
+  </body>
+</html>
