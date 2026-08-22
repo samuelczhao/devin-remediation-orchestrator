@@ -143,6 +143,11 @@ verification, and only the Issues event. GitHub's
 [signature validation guidance](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries)
 is implemented over the raw body.
 
+The challenge webhook is disabled between live demonstrations because its HTTPS tunnel is
+ephemeral. Re-establish the tunnel and verify the current hardened container before re-enabling
+it. The recorded live deliveries remain in the evidence; simulation exercises the same signed
+ingress without creating a paid session.
+
 In live mode, the dashboard and JSON APIs require HTTP Basic authentication with username
 `operator` and `REMEDIATION_CONTROL_PLANE_PASSWORD`; API documentation is disabled. Health checks
 remain public and contain no task data. The webhook route remains public but requires its
@@ -214,22 +219,26 @@ SHA-pinned review report carry those separate quality outcomes.
 
 ## Observed live result
 
-Four signed issue events produced four target-fork PR artifacts. Independent review accepted
+Four signed issue events produced four target-fork PR artifacts. Independent review found no
+take-home blocker in
 [PR #4](https://github.com/samuelczhao/superset/pull/4) and
 [PR #6](https://github.com/samuelczhao/superset/pull/6), rejected and closed
-[PR #5](https://github.com/samuelczhao/superset/pull/5), then accepted its corrected replacement
-[PR #8](https://github.com/samuelczhao/superset/pull/8) after a second review-driven amendment.
+[PR #5](https://github.com/samuelczhao/superset/pull/5), then used the findings to produce and amend
+[PR #8](https://github.com/samuelczhao/superset/pull/8). Later review found that PR #8 still needs
+a legacy association migration and an explicit reserved-name collision policy before upstream
+merge.
 The final dashboard snapshot showed no active or failed tasks and a 617.96-second median cycle
 time. This self-serve account returned 0.0 in the API's enterprise ACU field, so the submission
 does not infer usage or cost from it; Devin Billing is authoritative. The fork has no GitHub checks
-configured, so exact session-reported tests and independent review limits remain explicit in the
-evidence.
+configured, so exact session-reported tests and review limits remain explicit in the evidence.
+The live sessions used an earlier control-plane build; current hardening is verified by automated
+tests, CI, and simulation rather than another paid run.
 
 ## Evidence and presentation
 
 - [Implementation evidence](docs/EVIDENCE.md)
 - [SHA-pinned remediation review report](docs/REVIEW_REPORTS.md)
-- [Five-minute Loom runbook](docs/LOOM_SCRIPT.md)
+- Loom video supplied separately with the assignment submission
 - [Issue #1 technical specification](docs/issues/database-export-dataset-collision.md)
 - [Issue #2 technical specification](docs/issues/sync-tags-favorite-type.md)
 - [Issue #3 technical specification](docs/issues/dashboard-export-global-tag-state.md)

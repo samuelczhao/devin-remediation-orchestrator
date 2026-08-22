@@ -13,7 +13,7 @@ proves orchestration mechanics; it is not presented as proof that Devin remediat
 | Defect 2 | [Issue #2](https://github.com/samuelczhao/superset/issues/2) |
 | Defect 3 | [Issue #3](https://github.com/samuelczhao/superset/issues/3) |
 | Corrective issue | [Issue #7](https://github.com/samuelczhao/superset/issues/7), created after review rejected the first #2 fix |
-| Trigger label | `devin:ready`, applied through GitHub and received by the live signed webhook |
+| Trigger label | `devin:ready`, applied through GitHub and received by the then-active live signed webhook |
 | Branch protection | One approval, conversation resolution, admins enforced, no force pushes/deletion |
 
 GitHub recorded HTTP 202 for the four `issues.labeled` deliveries persisted by the service:
@@ -24,7 +24,7 @@ out-of-scope `issues.opened` and `issues.edited` deliveries because those payloa
 The hardening pass corrected that operator-facing defect: realistic signed non-labeled actions now
 return HTTP 202 `ignored_action` without creating a task.
 
-## Verified locally on 2026-08-20
+## Verified locally on 2026-08-22
 
 - Typecheck: passed.
 - Tests: 80 passed.
@@ -56,7 +56,7 @@ called correct until reviewer and CI evidence support it.
 | [#1](https://github.com/samuelczhao/superset/issues/1) | [Session](https://app.devin.ai/sessions/37720c2d94d14b8bb8b305235f58e60a) | [PR #4](https://github.com/samuelczhao/superset/pull/4) | Focused dataset export tests, nearby command tests, and pre-commit passed | No checks configured on fork | No blocking defect found; coverage and stale skipped-test gaps recorded |
 | [#2](https://github.com/samuelczhao/superset/issues/2) | [Session](https://app.devin.ai/sessions/d4433b04e98e45a0ba2023436f4cde92) | [PR #5](https://github.com/samuelczhao/superset/pull/5), closed unmerged | Focused tag tests and pre-commit reported passed | No checks configured on fork | Rejected: command remained broken end to end; corrective issue #7 opened |
 | [#3](https://github.com/samuelczhao/superset/issues/3) | [Session](https://app.devin.ai/sessions/3326b28309b04ff4bddf25f8903882a9) | [PR #6](https://github.com/samuelczhao/superset/pull/6) | 22 focused tests and 2 export tests passed; integration suite could not initialize its metadata DB | No checks configured on fork | No blocking defect found; two optional coverage improvements recorded |
-| [#7](https://github.com/samuelczhao/superset/issues/7) | [Session](https://app.devin.ai/sessions/2c66abc4f7274ef2807dbc8cb9f2fc6b) | [PR #8](https://github.com/samuelczhao/superset/pull/8) | 13 focused tests, 279 nearby tests, and pre-commit passed | No checks configured on fork | Initial review blocker corrected; amended-head review found no remaining take-home blocker |
+| [#7](https://github.com/samuelczhao/superset/issues/7) | [Session](https://app.devin.ai/sessions/2c66abc4f7274ef2807dbc8cb9f2fc6b) | [PR #8](https://github.com/samuelczhao/superset/pull/8) | 13 focused tests, 279 nearby tests, and pre-commit passed | No checks configured on fork | Initial blockers corrected; later audit found migration and reserved-name operator-flow gaps, so the PR is not upstream merge-ready |
 
 The targeted checks above are structured claims returned by each Devin session, not independently
 executed Superset CI. Local inspection confirmed the #1 and #3 diffs were architecturally sound,
@@ -78,7 +78,16 @@ The first PR #8 review found another exact-name collision: a custom tag named
 `favorited_by:<id>` could receive an implicit association that runtime cleanup would never remove.
 Devin amended the same PR to reject unexpected reserved-name types, re-read and validate a tag
 after an insert race, type-filter association joins, and add four regression tests. A second
-independent review accepted that amended head.
+review found no blocker within its take-home scope. A later audit expanded the production gate:
+
+- existing favorite associations stored with legacy object type `slice` are not migrated before
+  the new `chart` anti-join runs, so they can remain unreadable and receive a duplicate association;
+- users can create custom tags such as `editor:7`, while the backfill treats that reserved-name
+  collision as a fatal phase error. A production change needs an explicit preflight, validation,
+  migration, or skip-and-report policy rather than an implicit operational surprise.
+
+These gaps make PR #8 a review-feedback artifact and take-home candidate, not an upstream-ready
+change.
 
 This distinction is visible in the product: PR yield measures whether the system produced a
 review artifact; reviewer acceptance and CI are separate quality signals. A production rollout
@@ -86,7 +95,7 @@ would ingest both into the dashboard.
 
 ## Live control-plane snapshot
 
-After reconciliation completed on 2026-08-20:
+After reconciliation completed on 2026-08-20 in the earlier live control-plane build:
 
 - 4 accepted events, 4 terminal tasks, 0 active, 0 attention-required, and 0 failed;
 - 4 target-fork PR artifacts and 1.00 PR yield;
@@ -96,6 +105,8 @@ After reconciliation completed on 2026-08-20:
 
 The control plane correctly counts PR #5 as produced; the separate review record marks it
 rejected and closed. That is why the dashboard calls the metric PR yield rather than success rate.
+The current hardening changes were subsequently verified by typecheck, automated tests, CI, and
+the deterministic simulation; they were not exercised through another paid Devin session.
 
 ## Known evidence limits
 
@@ -103,6 +114,10 @@ rejected and closed. That is why the dashboard calls the metric PR yield rather 
 - Self-serve quota, credits, and dollar cost are visible in Devin Billing, not the organization
   ACU field. The submission makes no cost claim from the API's 0.0 value.
 - PR #8 exercised SQLite at runtime and compiled SQL for PostgreSQL/MySQL, not live servers.
+- PR #8 does not migrate legacy `tagged_object.object_type='slice'` favorite associations before
+  using the normalized `chart` value for new anti-joins.
+- A user-created custom tag with an implicit reserved name causes the relevant PR #8 backfill
+  phase to fail until an operator renames or removes it; the API does not prevent that collision.
 - Its conflict re-read uses an ordinary `SELECT`; a concurrent administrative `sync-tags` run at
   `REPEATABLE READ` can retain an old snapshot. Production hardening should use a locking read,
   require the winner row, type-filter type-tag joins, and add two-session database tests.

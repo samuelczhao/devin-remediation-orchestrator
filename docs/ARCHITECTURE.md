@@ -30,13 +30,13 @@ signed webhook ingress -----> SQLite delivery/task/event ledger
 | Identify issues | Three initial defects plus one corrective issue with bounded acceptance criteria | Public issues in the fork |
 | Event trigger | `issues.labeled` webhook for `devin:ready` | GitHub delivery plus persisted delivery ID |
 | Initiate Devin | `POST /v3/organizations/{org_id}/sessions` | Session ID and link |
-| Manage Devin | Durable polling and explicit blocked/failure mapping | State-transition history and current status |
+| Manage Devin | Durable polling and explicit blocked/failure mapping | Recorded baseline sessions plus automated current-path coverage |
 | Observable output | Devin-created PR against the fork | PR URL, state, and structured result |
 | Analytics | Counts, PR yield, cycle time, usage source, progress, failures | HTML dashboard and `/api/metrics` |
-| Working remediation | Real live sessions plus independent review, not only a fake demo | Issue-to-session-to-PR evidence table |
+| Working remediation | Real sessions plus independent review, with production limits preserved | Issue-to-session-to-PR evidence table |
 | Docker | One-worker application image with persistent SQLite volume | Container smoke and restart tests |
 | Reproducible demo | Signed deterministic fake webhook through the real ingress path | README command and automated test |
-| Five-minute presentation | What, How, Why, When narrative grounded in observed results | Loom script and recording checklist |
+| Five-minute presentation | What, How, Why, When narrative grounded in observed results | Loom link supplied separately with the assignment |
 
 ## Trust boundaries
 
@@ -123,7 +123,8 @@ and full prompts are never logged.
 - The default Compose file is simulation-only. Live mode requires the explicit
   `compose.live.yaml` override plus Devin, webhook, and operator credentials; the simulator also
   checks backend mode.
-- An HTTPS tunnel provides the live GitHub delivery; deterministic simulation remains available.
+- An HTTPS tunnel provided the recorded live GitHub deliveries and must be re-established before
+  re-enabling the disabled challenge webhook. Deterministic simulation remains available.
 - Live operator routes use HTTP Basic authentication; a customer deployment would replace it with
   SSO/RBAC. No auto-merge, issue-comment bot, frontend framework, or enterprise analytics are
   included.

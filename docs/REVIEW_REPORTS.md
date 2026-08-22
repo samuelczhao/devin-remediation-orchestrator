@@ -9,7 +9,11 @@ results. The fork has no hosted checks configured.
 | [#5](https://github.com/samuelczhao/superset/pull/5) | `0c3fc7e5d1d9c9fc708551855d31e3e863ca146b` | Rejected and closed | The command still failed before or during association creation on current SQLAlchemy/dialect paths; the repair test could observe stale ORM state. Findings became issue #7. |
 | [#6](https://github.com/samuelczhao/superset/pull/6) | `a5f43230252629a9533265d8aa7f8078e87cc439` | Accepted candidate | Instance-local tag-export state removes abort and concurrency leakage. Combined-tag content and literal interleaving tests are optional gaps; integration DB setup prevented independent integration execution. |
 | [#8 initial](https://github.com/samuelczhao/superset/pull/8) | `6f21b96f728e165d76364765e503606497d96beb` | Amendment required | Unexpected custom/editor rows using a reserved favorite-tag name could receive the wrong association. Review required an explicit collision and type-filtered joins. |
-| [#8 amended](https://github.com/samuelczhao/superset/pull/8) | `ce011364c0a49ce847a18aeef99ba1a1f3236ae4` | Accepted for take-home | Corrected SQLAlchemy 2 calls, portable joins, transaction handling, exact-name collisions, and test reloads. A narrow repeatable-read concurrency limitation remains documented. |
+| [#8 amended](https://github.com/samuelczhao/superset/pull/8) | `ce011364c0a49ce847a18aeef99ba1a1f3236ae4` | Take-home candidate; not merge-ready | Corrected SQLAlchemy 2 calls, portable joins, transaction handling, exact-name collisions, and test reloads. Later audit found that legacy `slice` associations need migration and user-created reserved names abort a backfill phase; concurrency and scale limits also remain. |
 
 “Accepted candidate” means no blocking correctness issue was found at the pinned head within the
 take-home scope. It does not mean merged, production-approved, or CI-confirmed.
+
+PR #8 is classified separately because later review expanded the production acceptance gate. Its
+core remediation is useful evidence of the issue-to-review feedback loop, but it requires a legacy
+association migration and an explicit reserved-name collision policy before upstream merge.
