@@ -28,7 +28,7 @@
         <article><strong>{{ metrics.pr_produced }}</strong><span>PRs produced</span></article>
         <article><strong>{{ metrics.pr_yield }}</strong><span>PR yield</span></article>
         <article><strong>{{ metrics.terminal }}</strong><span>Terminal</span></article>
-        <article><strong>{{ metrics.total_acus }}</strong><span>API-reported ACUs</span></article>
+        <article><strong>{{ usage_summary.value }}</strong><span>{{ usage_summary.label }}</span></article>
         <article><strong>{{ median_cycle }}</strong><span>Median cycle</span></article>
       </section>
 
@@ -58,7 +58,7 @@
                 <td>{% if task.pr_url %}<a href="{{ task.pr_url }}">Pull request</a><small>{{ task.pr_state or "state unavailable" }} at session completion</small>{% else %}—{% endif %}</td>
                 <td>{{ task.test_summary }}</td>
                 <td>{% if task.error_code %}<strong>{{ task.error_code }}</strong><small>{{ task.error_detail }}</small>{% else %}—{% endif %}</td>
-                <td>{{ task.acus_consumed }} reported</td>
+                <td>{{ task.usage_display }}</td>
                 <td>{{ task.updated_display }}</td>
               </tr>
               {% else %}
@@ -67,7 +67,7 @@
             </tbody>
           </table>
         </div>
-        <p class="footnote">PR yield measures workflow output, not correctness. Test results in session output are Devin-reported until independently confirmed by CI.</p>
+        <p class="footnote">PR yield measures workflow output, not correctness. Test results in session output are Devin-reported until independently confirmed by CI. Self-serve quota, credits, and cost come from Devin Billing, not the API ACU field.</p>
       </section>
     </main>
   </body>

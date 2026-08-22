@@ -130,6 +130,7 @@ def create_app(
                 "issue_url": canonical_issue_url(config, task.issue_number),
                 "state_label": _state_label(task.state),
                 "test_summary": _test_summary(task.structured_output),
+                "usage_display": _usage_display(config, task.acus_consumed),
                 "updated_display": _format_timestamp(task.updated_at),
             }
             for task in store.list_tasks()
@@ -141,6 +142,7 @@ def create_app(
                 "mode": config.app_mode,
                 "metrics": workflow_metrics,
                 "median_cycle": _format_duration(workflow_metrics.median_cycle_seconds),
+                "usage_summary": _usage_summary(config, workflow_metrics.total_acus),
                 "tasks": task_views,
                 "worker_last_error": orchestrator.last_error,
                 "worker_last_attempt": _format_timestamp(orchestrator.last_run_at),
@@ -245,6 +247,22 @@ def _format_timestamp(value: datetime | None) -> str:
 
 def _format_duration(value: object) -> str:
     return f"{value:.1f}s" if value is not None else "—"
+
+
+def _usage_summary(settings: Settings, acus: object) -> dict[str, str]:
+    if settings.app_mode == "simulation":
+        return {"value": str(acus), "label": "Simulated ACUs"}
+    if settings.usage_model == "enterprise":
+        return {"value": str(acus), "label": "API-reported ACUs"}
+    return {"value": "Devin Billing", "label": "Self-serve usage"}
+
+
+def _usage_display(settings: Settings, acus: object) -> str:
+    if settings.app_mode == "simulation":
+        return f"{acus} simulated ACUs"
+    if settings.usage_model == "enterprise":
+        return f"{acus} API-reported ACUs"
+    return "See Devin Billing"
 
 
 app = create_app()

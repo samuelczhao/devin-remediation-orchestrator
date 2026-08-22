@@ -57,13 +57,13 @@ not report `mode=simulation`. Expected terminal evidence:
 - task state `completed_with_pr`;
 - a target-repository PR URL;
 - one Devin-reported passing test;
-- PR yield, cycle time, and cumulative ACUs in `/api/metrics`.
+- PR yield, cycle time, and simulated ACUs in `/api/metrics`.
 
 Run the command again to demonstrate idempotency: `created` becomes `false`, and no second session
 is created. After the task is terminal, `docker compose restart` demonstrates that its ledger,
-session link, PR link, metrics, and ACUs survive a process restart. The in-memory fake adapter is
-deterministic: if restart occurs while a simulated task is active, it reconstructs that task's
-fake remote session from the persisted session ID and continues to terminal state.
+session link, PR link, metrics, and simulated usage survive a process restart. The in-memory fake
+adapter is deterministic: if restart occurs while a simulated task is active, it reconstructs
+that task's fake remote session from the persisted session ID and continues to terminal state.
 
 ```bash
 docker compose down
@@ -127,6 +127,7 @@ export REMEDIATION_CONTROL_PLANE_PASSWORD="$(security find-generic-password \
 export REMEDIATION_DEVIN_MAX_ACU_LIMIT=3
 export REMEDIATION_MAX_ACTIVE_SESSIONS=3
 export REMEDIATION_DEVIN_BYPASS_APPROVAL=false
+export REMEDIATION_USAGE_MODEL=self_serve
 docker compose -f compose.yaml -f compose.live.yaml up --build -d
 ```
 
@@ -194,7 +195,7 @@ The dashboard and `/api/metrics` answer whether the workflow is operating:
 - accepted, queued, active, attention-required, blocked, and failed task counts;
 - PR count and PR yield among terminal tasks;
 - median issue-to-terminal cycle time;
-- cumulative ACUs;
+- simulated ACUs in demo mode, or enterprise ACUs when configured;
 - per-task links to the source issue, Devin session, and PR;
 - Devin-reported test counts, session-time PR state, and per-task error detail;
 - current worker attempt/healthy timestamps plus stale/error-aware readiness.
@@ -212,9 +213,11 @@ Four signed issue events produced four target-fork PR artifacts. Independent rev
 [PR #6](https://github.com/samuelczhao/superset/pull/6), rejected and closed
 [PR #5](https://github.com/samuelczhao/superset/pull/5), then accepted its corrected replacement
 [PR #8](https://github.com/samuelczhao/superset/pull/8) after a second review-driven amendment.
-The final dashboard snapshot showed no active or failed tasks, 617.96-second median cycle time,
-and 0.0 cumulative ACUs as reported by the Devin API. The fork has no GitHub checks configured,
-so exact session-reported tests and independent review limits remain explicit in the evidence.
+The final dashboard snapshot showed no active or failed tasks and a 617.96-second median cycle
+time. This self-serve account returned 0.0 in the API's enterprise ACU field, so the submission
+does not infer usage or cost from it; Devin Billing is authoritative. The fork has no GitHub checks
+configured, so exact session-reported tests and independent review limits remain explicit in the
+evidence.
 
 ## Evidence and presentation
 

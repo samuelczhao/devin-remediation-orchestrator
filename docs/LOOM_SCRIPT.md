@@ -52,12 +52,13 @@ live-evidence volume from the default Compose project.
 ## 2:40–3:30 — Observability and failure behavior
 
 “A VP can see queue depth, active and attention-required tasks, failures, PR yield, cycle time, and
-ACUs. Every row links back to the issue, session, and PR. PR yield means workflow output, not code
-quality: this run produced four PRs, but independent review rejected PR #5 and the replacement PR
-#8 had to incorporate a second review correction. Devin-reported tests remain agent claims until
-GitHub CI confirms them.”
+the applicable usage source. Every row links back to the issue, session, and PR. PR yield means
+workflow output, not code quality: this run produced four PRs, but independent review rejected PR
+#5 and the replacement PR #8 had to incorporate a second review correction. Devin-reported tests
+remain agent claims until GitHub CI confirms them. This is a self-serve account, so quota and cost
+come from Devin Billing rather than the enterprise ACU field.”
 
-Show `/api/metrics`, one completed task, and—if available—one waiting/failure mapping in tests.
+Show the dashboard, one completed task, and—if available—one waiting/failure mapping in tests.
 Mention that duplicate webhook delivery cannot spend twice and state survives restart.
 
 ## 3:30–4:15 — Why Devin

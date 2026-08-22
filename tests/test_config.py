@@ -47,6 +47,7 @@ def test_prefixed_environment_overrides_app_config(
     monkeypatch.setenv("REMEDIATION_CONTROL_PLANE_PASSWORD", "p" * 32)
     monkeypatch.setenv("REMEDIATION_GITHUB_REPOSITORY", "example/superset-fork")
     monkeypatch.setenv("REMEDIATION_GITHUB_ALLOWED_ACTOR", "release-operator")
+    monkeypatch.setenv("REMEDIATION_USAGE_MODEL", "enterprise")
 
     settings = Settings()
 
@@ -55,6 +56,7 @@ def test_prefixed_environment_overrides_app_config(
     assert settings.devin_api_key.get_secret_value() == "cog_test"
     assert settings.github_repository == "example/superset-fork"
     assert settings.github_allowed_actor == "release-operator"
+    assert settings.usage_model == "enterprise"
 
 
 def test_live_mode_requires_devin_credentials() -> None:

@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     devin_org_id: str | None = None
     devin_max_acu_limit: int = Field(default=3, gt=0)
     devin_bypass_approval: bool = False
+    usage_model: Literal["self_serve", "enterprise"] = "self_serve"
     github_webhook_secret: SecretStr = SecretStr(DEFAULT_WEBHOOK_SECRET)
     control_plane_username: str = "operator"
     control_plane_password: SecretStr | None = None

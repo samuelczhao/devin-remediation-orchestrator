@@ -143,6 +143,7 @@ def test_dashboard_exposes_operational_signals_and_security_headers(tmp_path: Pa
         response = client.get("/")
     assert "Queued" in response.text
     assert "Median cycle" in response.text
+    assert "Simulated ACUs" in response.text
     assert "Last attempt" in response.text
     assert 'http-equiv="refresh"' in response.text
     assert response.headers["cache-control"] == "no-store"
@@ -167,8 +168,13 @@ def test_live_control_plane_requires_basic_auth(tmp_path: Path) -> None:
         assert client.get("/").status_code == 401
         assert client.get("/health/live").status_code == 200
         assert client.get("/openapi.json").status_code == 404
-        authorized = client.get("/api/tasks", headers={"authorization": f"Basic {credentials}"})
+        headers = {"authorization": f"Basic {credentials}"}
+        authorized = client.get("/api/tasks", headers=headers)
+        dashboard = client.get("/", headers=headers)
     assert authorized.status_code == 200
+    assert "Self-serve usage" in dashboard.text
+    assert "Devin Billing" in dashboard.text
+    assert "API-reported ACUs" not in dashboard.text
 
 
 def test_readiness_rejects_stale_or_failing_worker(tmp_path: Path) -> None:

@@ -32,7 +32,7 @@ signed webhook ingress -----> SQLite delivery/task/event ledger
 | Initiate Devin | `POST /v3/organizations/{org_id}/sessions` | Session ID and link |
 | Manage Devin | Durable polling and explicit blocked/failure mapping | State-transition history and current status |
 | Observable output | Devin-created PR against the fork | PR URL, state, and structured result |
-| Analytics | Counts, PR yield, cycle time, ACUs, progress, failures | HTML dashboard and `/api/metrics` |
+| Analytics | Counts, PR yield, cycle time, usage source, progress, failures | HTML dashboard and `/api/metrics` |
 | Working remediation | Real live sessions plus independent review, not only a fake demo | Issue-to-session-to-PR evidence table |
 | Docker | One-worker application image with persistent SQLite volume | Container smoke and restart tests |
 | Reproducible demo | Signed deterministic fake webhook through the real ingress path | README command and automated test |
@@ -103,7 +103,7 @@ The dashboard and JSON API expose:
 
 - accepted, queued, active, needs-attention, failed, and PR-producing task counts;
 - progress for each issue and links to the Devin session and PR;
-- cumulative ACUs per session and in total;
+- simulated ACUs or enterprise API-reported ACUs when applicable;
 - median issue-to-PR cycle time and PR production rate;
 - safe error codes and status details.
 

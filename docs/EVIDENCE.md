@@ -91,7 +91,8 @@ After reconciliation completed on 2026-08-20:
 - 4 accepted events, 4 terminal tasks, 0 active, 0 attention-required, and 0 failed;
 - 4 target-fork PR artifacts and 1.00 PR yield;
 - 617.96-second median issue-to-terminal cycle time;
-- 0.0 cumulative ACUs as reported by the Devin API.
+- self-serve usage delegated to Devin Billing; the enterprise ACU API field returned 0.0 and is
+  not treated as cost evidence.
 
 The control plane correctly counts PR #5 as produced; the separate review record marks it
 rejected and closed. That is why the dashboard calls the metric PR yield rather than success rate.
@@ -99,6 +100,8 @@ rejected and closed. That is why the dashboard calls the metric PR yield rather 
 ## Known evidence limits
 
 - The fork has no GitHub checks configured, so Superset test results remain session-reported.
+- Self-serve quota, credits, and dollar cost are visible in Devin Billing, not the organization
+  ACU field. The submission makes no cost claim from the API's 0.0 value.
 - PR #8 exercised SQLite at runtime and compiled SQL for PostgreSQL/MySQL, not live servers.
 - Its conflict re-read uses an ordinary `SELECT`; a concurrent administrative `sync-tags` run at
   `REPEATABLE READ` can retain an old snapshot. Production hardening should use a locking read,
