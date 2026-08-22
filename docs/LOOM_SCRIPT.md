@@ -33,7 +33,10 @@ Open `app/github_webhook.py`, `app/devin_client.py`, and `app/orchestrator.py`. 
 Show a GitHub webhook delivery or replay the deterministic Docker simulation:
 
 ```bash
-docker compose exec orchestrator /app/.venv/bin/python scripts/simulate_webhook.py
+docker compose down
+docker compose -p devin-demo down --volumes
+docker compose -p devin-demo up --build -d
+docker compose -p devin-demo exec orchestrator /app/.venv/bin/python scripts/simulate_webhook.py
 ```
 
 Show the dashboard move through queued/running/terminal states. Then open the issue #7 Devin
@@ -41,16 +44,21 @@ session and PR #8. Explain the SQLAlchemy 2, portable concatenation, and transac
 show the reserved-name regression test added after independent review. Do not call the simulated
 PR real; use it only to demonstrate repeatability when the live task is already done. The command
 refuses to run if the backend reports live mode.
+The isolated `devin-demo` project starts with a fresh disposable volume, so the recording shows
+queued → running → terminal instead of immediately deduplicating an earlier simulation. Run
+`docker compose -p devin-demo down --volumes` after recording; it does not remove the preserved
+live-evidence volume from the default Compose project.
 
 ## 2:40–3:30 — Observability and failure behavior
 
 “A VP can see queue depth, active and attention-required tasks, failures, PR yield, cycle time, and
-ACUs. Every row links back to the issue, session, and PR. PR yield means workflow output, not code
-quality: this run produced four PRs, but independent review rejected PR #5 and the replacement PR
-#8 had to incorporate a second review correction. Devin-reported tests remain agent claims until
-GitHub CI confirms them.”
+the applicable usage source. Every row links back to the issue, session, and PR. PR yield means
+workflow output, not code quality: this run produced four PRs, but independent review rejected PR
+#5 and the replacement PR #8 had to incorporate a second review correction. Devin-reported tests
+remain agent claims until GitHub CI confirms them. This is a self-serve account, so quota and cost
+come from Devin Billing rather than the enterprise ACU field.”
 
-Show `/api/metrics`, one completed task, and—if available—one waiting/failure mapping in tests.
+Show the dashboard, one completed task, and—if available—one waiting/failure mapping in tests.
 Mention that duplicate webhook delivery cannot spend twice and state survives restart.
 
 ## 3:30–4:15 — Why Devin

@@ -8,10 +8,10 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     environment:
-      APP_MODE: simulation
-      DATABASE_PATH: /data/orchestrator.db
-      GITHUB_WEBHOOK_SECRET: local-demo-secret
-      POLL_INTERVAL_SECONDS: "2"
+      REMEDIATION_APP_MODE: simulation
+      REMEDIATION_DATABASE_PATH: /data/orchestrator.db
+      REMEDIATION_GITHUB_WEBHOOK_SECRET: local-demo-secret
+      REMEDIATION_POLL_INTERVAL_SECONDS: "2"
     volumes:
       - orchestrator-data:/data
     tmpfs:

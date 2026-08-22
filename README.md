@@ -57,12 +57,13 @@ not report `mode=simulation`. Expected terminal evidence:
 - task state `completed_with_pr`;
 - a target-repository PR URL;
 - one Devin-reported passing test;
-- PR yield, cycle time, and cumulative ACUs in `/api/metrics`.
+- PR yield, cycle time, and simulated ACUs in `/api/metrics`.
 
 Run the command again to demonstrate idempotency: `created` becomes `false`, and no second session
 is created. After the task is terminal, `docker compose restart` demonstrates that its ledger,
-session link, PR link, metrics, and ACUs survive a process restart. The in-memory fake adapter is
-not intended to reconstruct an active simulated session across restart.
+session link, PR link, metrics, and simulated usage survive a process restart. The in-memory fake
+adapter is deterministic: if restart occurs while a simulated task is active, it reconstructs
+that task's fake remote session from the persisted session ID and continues to terminal state.
 
 ```bash
 docker compose down
@@ -80,10 +81,11 @@ uv sync
 make quality
 ```
 
-The suite covers signature verification, request bounds, stable repo and actor allowlists,
-delivery/issue deduplication, ambiguous create recovery, Devin lifecycle mapping, structured
-output validation, target-PR validation, metrics, HTML escaping, and full simulated issue-to-PR
-progression.
+The suite covers signature verification, realistic ignored GitHub actions, request bounds, stable
+repo and actor allowlists, delivery/issue deduplication, paginated ambiguous-create recovery,
+malformed-response isolation, active-session restart, Devin lifecycle mapping, strict structured
+output/target-PR validation, operator authentication, metrics, HTML escaping, and full simulated
+issue-to-PR progression. GitHub Actions runs the same typecheck → tests → lint gate.
 
 ## Live mode
 
@@ -97,26 +99,35 @@ this safety gate before spending ACUs:
 3. Keep `master` branch protection enabled. It currently requires one approval, enforces the rule
    for admins, and blocks force pushes and deletion.
 4. Store secrets outside the repository. The application fails closed in live mode when the API
-   key, organization ID, or non-default webhook secret is missing.
+   key, organization ID, non-default webhook secret, or control-plane password is missing.
 
 This project uses macOS Keychain locally:
 
 ```bash
 webhook_secret="$(openssl rand -hex 32)"
+control_plane_password="$(openssl rand -hex 32)"
 security add-generic-password -U \
   -s devin-remediation-orchestrator-webhook \
   -a superset-remediation-bot \
   -w "$webhook_secret"
-unset webhook_secret
+security add-generic-password -U \
+  -s devin-remediation-orchestrator-control-plane \
+  -a superset-remediation-bot \
+  -w "$control_plane_password"
+unset webhook_secret control_plane_password
 
-export DEVIN_API_KEY="$(security find-generic-password \
+export REMEDIATION_DEVIN_API_KEY="$(security find-generic-password \
   -s devin-remediation-orchestrator -a superset-remediation-bot -w)"
-export DEVIN_ORG_ID="$(security find-generic-password \
+export REMEDIATION_DEVIN_ORG_ID="$(security find-generic-password \
   -s devin-remediation-orchestrator-org-id -a superset-remediation-bot -w)"
-export GITHUB_WEBHOOK_SECRET="$(security find-generic-password \
+export REMEDIATION_GITHUB_WEBHOOK_SECRET="$(security find-generic-password \
   -s devin-remediation-orchestrator-webhook -a superset-remediation-bot -w)"
-export DEVIN_MAX_ACU_LIMIT=3
-export DEVIN_BYPASS_APPROVAL=false
+export REMEDIATION_CONTROL_PLANE_PASSWORD="$(security find-generic-password \
+  -s devin-remediation-orchestrator-control-plane -a superset-remediation-bot -w)"
+export REMEDIATION_DEVIN_MAX_ACU_LIMIT=3
+export REMEDIATION_MAX_ACTIVE_SESSIONS=3
+export REMEDIATION_DEVIN_BYPASS_APPROVAL=false
+export REMEDIATION_USAGE_MODEL=self_serve
 docker compose -f compose.yaml -f compose.live.yaml up --build -d
 ```
 
@@ -125,6 +136,11 @@ Expose `http://127.0.0.1:8000` through an HTTPS tunnel and add a repository webh
 verification, and only the Issues event. GitHub's
 [signature validation guidance](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries)
 is implemented over the raw body.
+
+In live mode, the dashboard and JSON APIs require HTTP Basic authentication with username
+`operator` and `REMEDIATION_CONTROL_PLANE_PASSWORD`; API documentation is disabled. Health checks
+remain public and contain no task data. The webhook route remains public but requires its
+independent HMAC secret.
 
 Trigger a remediation by applying `devin:ready` once to a newly reviewed issue. The demonstrated
 issues are already labeled, and the durable `(repository_id, issue_id)` key deliberately prevents
@@ -142,7 +158,12 @@ repository, instructed not to merge, and constrained by protected `master`.
 - Session creation is not falsely described as exactly-once: a network timeout can make the
   remote result ambiguous because the API exposes no idempotency key.
 - Every session receives a unique task tag. After an ambiguous create, the reconciler searches by
-  that tag and never blindly repeats the paid create request.
+  that tag across cursor-paginated results and never blindly repeats the paid create request.
+- An atomic active-session limit bounds concurrent ACU exposure; the human label remains the
+  authorization and aggregate-budget gate for this demo.
+- HTTP 429 create responses are retried only after a configured backoff. Before retrying, the task
+  is durably reclaimed as `creating`, so a crash triggers tag recovery instead of another POST;
+  authentication, authorization, and validation failures remain terminal.
 - Live queued, creating, running, and attention-required tasks are reconciled after restart.
 - Ambiguous creates remain attention-required and repeat tag-only discovery every 30 seconds;
   the paid create request is never repeated.
@@ -152,6 +173,15 @@ repository, instructed not to merge, and constrained by protected `master`.
   allowlisted fork.
 - Waiting, suspended, blocked, API error, invalid-output, and wrong-repository outcomes remain
   distinguishable.
+- A malformed response for one task cannot prevent later tasks in the same sweep from progressing.
+- Validated terminal evidence is persisted as `session_termination_pending` before the cleanup
+  call. Success transitions terminal without trusting a stale DELETE body; failure or process
+  death retains the PR/output evidence and remains retryable.
+
+Sessionless ambiguous creates count against the active limit on purpose: the service cannot know
+whether a paid remote session exists. If the limit fills with unresolved ambiguous tasks, intake
+stops as a visible fail-closed circuit breaker. This MVP does not provide an automated “abandon”
+button because retrying without a human verifying Devin's session list could duplicate spend.
 
 The Devin API client follows the official
 [session status endpoint](https://docs.devin.ai/api-reference/v3/sessions/get-organizations-session).
@@ -165,13 +195,16 @@ The dashboard and `/api/metrics` answer whether the workflow is operating:
 - accepted, queued, active, attention-required, blocked, and failed task counts;
 - PR count and PR yield among terminal tasks;
 - median issue-to-terminal cycle time;
-- cumulative ACUs;
+- simulated ACUs in demo mode, or enterprise ACUs when configured;
 - per-task links to the source issue, Devin session, and PR;
-- worker health plus safe error/status fields.
+- Devin-reported test counts, session-time PR state, and per-task error detail;
+- current worker attempt/healthy timestamps plus stale/error-aware readiness.
 
 PR yield is intentionally not labeled “success rate.” Devin-reported test commands are agent
 claims until confirmed by the PR's CI and reviewer inspection. The submission reports observed
 results from a small live sample rather than generalized productivity claims.
+The MVP does not yet ingest current GitHub PR, review, or Superset CI state; the evidence table and
+SHA-pinned review report carry those separate quality outcomes.
 
 ## Observed live result
 
@@ -180,13 +213,16 @@ Four signed issue events produced four target-fork PR artifacts. Independent rev
 [PR #6](https://github.com/samuelczhao/superset/pull/6), rejected and closed
 [PR #5](https://github.com/samuelczhao/superset/pull/5), then accepted its corrected replacement
 [PR #8](https://github.com/samuelczhao/superset/pull/8) after a second review-driven amendment.
-The final dashboard snapshot showed no active or failed tasks, 617.96-second median cycle time,
-and 0.0 cumulative ACUs as reported by the Devin API. The fork has no GitHub checks configured,
-so exact session-reported tests and independent review limits remain explicit in the evidence.
+The final dashboard snapshot showed no active or failed tasks and a 617.96-second median cycle
+time. This self-serve account returned 0.0 in the API's enterprise ACU field, so the submission
+does not infer usage or cost from it; Devin Billing is authoritative. The fork has no GitHub checks
+configured, so exact session-reported tests and independent review limits remain explicit in the
+evidence.
 
 ## Evidence and presentation
 
 - [Implementation evidence](docs/EVIDENCE.md)
+- [SHA-pinned remediation review report](docs/REVIEW_REPORTS.md)
 - [Five-minute Loom runbook](docs/LOOM_SCRIPT.md)
 - [Issue #1 technical specification](docs/issues/database-export-dataset-collision.md)
 - [Issue #2 technical specification](docs/issues/sync-tags-favorite-type.md)

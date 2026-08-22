@@ -55,3 +55,24 @@ def test_needs_attention_session_is_reconciled_after_restart(tmp_path: Path) -> 
         structured_output=None,
     )
     assert [active.id for active in store.list_active()] == [task.id]
+
+
+def test_claim_respects_global_active_session_limit(tmp_path: Path) -> None:
+    store = create_store(tmp_path / "tasks.db")
+    first, _ = store.register("delivery-1", issue_payload(issue_id=1, issue_number=1))
+    store.register("delivery-2", issue_payload(issue_id=2, issue_number=2))
+    assert store.claim_queued(max_active_sessions=1) is not None
+    store.attach_session(first.id, "devin-1", "https://app.devin.ai/sessions/devin-1")
+    assert store.claim_queued(max_active_sessions=1) is None
+
+
+def test_attaching_recovered_session_clears_ambiguous_error(tmp_path: Path) -> None:
+    store = create_store(tmp_path / "tasks.db")
+    task, _ = store.register("delivery-1", issue_payload())
+    assert store.claim_queued() is not None
+    store.mark_create_unknown(task.id, "outcome unknown")
+    store.attach_session(task.id, "devin-1", "https://app.devin.ai/sessions/devin-1")
+    recovered = store.get(task.id)
+    assert recovered is not None
+    assert recovered.error_code is None
+    assert recovered.error_detail is None

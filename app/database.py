@@ -81,9 +81,7 @@ class TaskStore:
             if task:
                 return task, False
             task_id = str(uuid4())
-            connection.execute(
-                "INSERT INTO deliveries VALUES (?, ?)", (delivery_id, now)
-            )
+            connection.execute("INSERT INTO deliveries VALUES (?, ?)", (delivery_id, now))
             connection.execute(
                 """INSERT INTO tasks (
                 id, delivery_id, repository_id, repository, issue_id, issue_number,
@@ -121,9 +119,15 @@ class TaskStore:
         ).fetchone()
         return _to_task(row) if row else None
 
-    def claim_queued(self) -> TaskRecord | None:
+    def claim_queued(self, max_active_sessions: int = 1) -> TaskRecord | None:
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            active_count = connection.execute(
+                "SELECT COUNT(*) FROM tasks WHERE state IN (?, ?, ?)",
+                (TaskState.CREATING, TaskState.RUNNING, TaskState.NEEDS_ATTENTION),
+            ).fetchone()[0]
+            if active_count >= max_active_sessions:
+                return None
             row = connection.execute(
                 "SELECT * FROM tasks WHERE state = ? ORDER BY created_at LIMIT 1",
                 (TaskState.QUEUED,),
@@ -138,10 +142,26 @@ class TaskStore:
         with self._connect() as connection:
             task = self._get(connection, task_id)
             connection.execute(
-                "UPDATE tasks SET session_id = ?, session_url = ? WHERE id = ?",
+                """UPDATE tasks SET session_id = ?, session_url = ?,
+                error_code = NULL, error_detail = NULL WHERE id = ?""",
                 (session_id, session_url, task_id),
             )
             self._transition(connection, task, TaskState.RUNNING, "Devin session created")
+
+    def prepare_create_retry(self, task_id: str) -> TaskRecord:
+        with self._connect() as connection:
+            task = self._get(connection, task_id)
+            self._transition(
+                connection,
+                task,
+                TaskState.CREATING,
+                "rate-limited session create retry claimed",
+            )
+            connection.execute(
+                "UPDATE tasks SET error_code = NULL, error_detail = NULL WHERE id = ?",
+                (task_id,),
+            )
+            return self._get(connection, task_id)
 
     def observe_session(
         self,
@@ -180,12 +200,15 @@ class TaskStore:
             self._transition(connection, task, state, status_detail or status)
 
     def mark_create_unknown(self, task_id: str, detail: str) -> None:
+        self.mark_needs_attention(task_id, "session_create_unknown", detail)
+
+    def mark_needs_attention(self, task_id: str, code: str, detail: str) -> None:
         with self._connect() as connection:
             task = self._get(connection, task_id)
             self._transition(connection, task, TaskState.NEEDS_ATTENTION, detail)
             connection.execute(
                 "UPDATE tasks SET error_code = ?, error_detail = ? WHERE id = ?",
-                ("session_create_unknown", detail, task_id),
+                (code, detail, task_id),
             )
 
     def mark_failed(self, task_id: str, code: str, detail: str) -> None:
@@ -228,7 +251,9 @@ class TaskStore:
         tasks = self.list_tasks()
         counts = {state: sum(task.state == state for task in tasks) for state in TaskState}
         terminal = sum(task.state in _terminal_states() for task in tasks)
-        pr_produced = counts[TaskState.COMPLETED_WITH_PR]
+        pr_produced = sum(
+            task.pr_url is not None and task.state in _terminal_states() for task in tasks
+        )
         return TaskMetrics(
             total=len(tasks),
             queued=counts[TaskState.QUEUED],

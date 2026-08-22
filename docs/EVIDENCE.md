@@ -19,14 +19,15 @@ proves orchestration mechanics; it is not presented as proof that Devin remediat
 GitHub recorded HTTP 202 for the four `issues.labeled` deliveries persisted by the service:
 `875240b0-9cbe-11f1-9aaa-c06248d8f279`, `8f9e46b0-9cbe-11f1-9438-e41d23da87d4`,
 `906407b0-9cbe-11f1-8541-6dcade638c7a`, and
-`ce4e7c20-9cc0-11f1-859c-d3228e8978a3`. Out-of-scope `issues.opened` and `issues.edited`
-deliveries received HTTP 400, demonstrating that the live ingress failed closed rather than
-starting extra sessions.
+`ce4e7c20-9cc0-11f1-859c-d3228e8978a3`. The original live hook also recorded HTTP 400 for
+out-of-scope `issues.opened` and `issues.edited` deliveries because those payloads omit `label`.
+The hardening pass corrected that operator-facing defect: realistic signed non-labeled actions now
+return HTTP 202 `ignored_action` without creating a task.
 
 ## Verified locally on 2026-08-20
 
 - Typecheck: passed.
-- Tests: 43 passed.
+- Tests: 80 passed.
 - Lint: passed.
 - Simulation and explicit live-override Compose configurations: valid.
 - Image: built successfully and ran as UID 10001 with a read-only root filesystem.
@@ -37,6 +38,10 @@ starting extra sessions.
 - Simulated observability: one PR / one terminal task, 1.00 PR yield, 1.25 simulated ACUs.
 - Repeated issue event: `created: false`; the original task/session was reused.
 - Container restart: completed task, PR URL, ACUs, and metrics remained present.
+- Active simulated sessions reconstruct after a process restart and continue to terminal state.
+- Malformed Devin responses are isolated per task, and ambiguous-session lookup follows cursors.
+- Live operator routes reject unauthenticated access; realistic non-labeled issue actions return
+  an accepted ignore response instead of a failed delivery.
 
 The simulation's PR number, commit, tests, and ACUs are fixtures and are labeled as simulated in
 the UI and output.
@@ -57,6 +62,9 @@ The targeted checks above are structured claims returned by each Devin session, 
 executed Superset CI. Local inspection confirmed the #1 and #3 diffs were architecturally sound,
 but this checkout does not contain a configured Superset Python environment. That limitation is
 preserved instead of turning an agent report into a CI claim.
+
+The orchestration repository includes a public quality workflow. Superset PRs still have no hosted
+checks configured, so that workflow does not convert Devin-reported Superset tests into CI proof.
 
 ## Review feedback loop
 
@@ -83,7 +91,8 @@ After reconciliation completed on 2026-08-20:
 - 4 accepted events, 4 terminal tasks, 0 active, 0 attention-required, and 0 failed;
 - 4 target-fork PR artifacts and 1.00 PR yield;
 - 617.96-second median issue-to-terminal cycle time;
-- 0.0 cumulative ACUs as reported by the Devin API.
+- self-serve usage delegated to Devin Billing; the enterprise ACU API field returned 0.0 and is
+  not treated as cost evidence.
 
 The control plane correctly counts PR #5 as produced; the separate review record marks it
 rejected and closed. That is why the dashboard calls the metric PR yield rather than success rate.
@@ -91,6 +100,8 @@ rejected and closed. That is why the dashboard calls the metric PR yield rather 
 ## Known evidence limits
 
 - The fork has no GitHub checks configured, so Superset test results remain session-reported.
+- Self-serve quota, credits, and dollar cost are visible in Devin Billing, not the organization
+  ACU field. The submission makes no cost claim from the API's 0.0 value.
 - PR #8 exercised SQLite at runtime and compiled SQL for PostgreSQL/MySQL, not live servers.
 - Its conflict re-read uses an ordinary `SELECT`; a concurrent administrative `sync-tags` run at
   `REPEATABLE READ` can retain an old snapshot. Production hardening should use a locking read,

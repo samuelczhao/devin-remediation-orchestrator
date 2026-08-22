@@ -1,5 +1,7 @@
+import base64
 import json
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
 from uuid import uuid4
@@ -115,6 +117,16 @@ def test_wrong_label_is_ignored(tmp_path: Path) -> None:
     assert response.json() == {"accepted": False, "reason": "ignored_label"}
 
 
+def test_realistic_non_labeled_issue_action_is_ignored(tmp_path: Path) -> None:
+    settings = make_settings(tmp_path / "tasks.db")
+    payload = issue_payload_data(action="opened")
+    payload.pop("label")
+    with TestClient(create_app(settings)) as client:
+        response = post_webhook(client, payload)
+    assert response.status_code == 202
+    assert response.json() == {"accepted": False, "reason": "ignored_action"}
+
+
 def test_dashboard_escapes_issue_title(tmp_path: Path) -> None:
     settings = make_settings(tmp_path / "tasks.db")
     app = create_app(settings, FakeDevinClient(settings.github_repository))
@@ -123,6 +135,61 @@ def test_dashboard_escapes_issue_title(tmp_path: Path) -> None:
         html = client.get("/").text
     assert "<script>alert(1)</script>" not in html
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+
+
+def test_dashboard_exposes_operational_signals_and_security_headers(tmp_path: Path) -> None:
+    settings = make_settings(tmp_path / "tasks.db")
+    with TestClient(create_app(settings)) as client:
+        response = client.get("/")
+    assert "Queued" in response.text
+    assert "Median cycle" in response.text
+    assert "Simulated ACUs" in response.text
+    assert "Last attempt" in response.text
+    assert 'http-equiv="refresh"' in response.text
+    assert response.headers["cache-control"] == "no-store"
+    assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
+
+
+def test_live_control_plane_requires_basic_auth(tmp_path: Path) -> None:
+    password = "p" * 32
+    settings = Settings(
+        app_mode="live",
+        database_path=tmp_path / "tasks.db",
+        devin_api_key=SecretStr("cog_test"),
+        devin_org_id="org-test",
+        github_webhook_secret=SecretStr("w" * 32),
+        control_plane_password=SecretStr(password),
+        poll_interval_seconds=100,
+    )
+    credentials = base64.b64encode(f"operator:{password}".encode()).decode()
+    app = create_app(settings, FakeDevinClient(settings.github_repository))
+    with TestClient(app) as client:
+        assert client.get("/api/tasks").status_code == 401
+        assert client.get("/").status_code == 401
+        assert client.get("/health/live").status_code == 200
+        assert client.get("/openapi.json").status_code == 404
+        headers = {"authorization": f"Basic {credentials}"}
+        authorized = client.get("/api/tasks", headers=headers)
+        dashboard = client.get("/", headers=headers)
+    assert authorized.status_code == 200
+    assert "Self-serve usage" in dashboard.text
+    assert "Devin Billing" in dashboard.text
+    assert "API-reported ACUs" not in dashboard.text
+
+
+def test_readiness_rejects_stale_or_failing_worker(tmp_path: Path) -> None:
+    settings = make_settings(tmp_path / "tasks.db").model_copy(
+        update={"poll_interval_seconds": 100, "worker_stale_after_seconds": 1}
+    )
+    app = create_app(settings)
+    with TestClient(app) as client:
+        orchestrator = app.state.orchestrator
+        orchestrator.last_run_at = datetime.now(UTC) - timedelta(seconds=2)
+        orchestrator.last_error = None
+        assert client.get("/health/ready").status_code == 503
+        orchestrator.last_run_at = datetime.now(UTC)
+        orchestrator.last_error = "reconciliation_errors"
+        assert client.get("/health/ready").status_code == 503
 
 
 def test_simulation_completes_issue_to_pr_flow(tmp_path: Path) -> None:

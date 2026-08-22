@@ -1,8 +1,9 @@
-from collections.abc import Sequence
+from datetime import datetime
 from decimal import Decimal
 from typing import Any, Protocol
 
 import httpx
+from pydantic import ValidationError
 
 from app.config import Settings
 from app.prompt import build_prompt, canonical_issue_url
@@ -14,15 +15,16 @@ RESULT_SCHEMA: dict[str, Any] = {
     "required": ["result", "summary", "tests", "commit_sha", "pr_url", "failure_reason"],
     "properties": {
         "result": {"enum": ["pr_opened", "blocked", "no_change_needed", "failed"]},
-        "summary": {"type": "string"},
+        "summary": {"type": "string", "minLength": 1},
         "tests": {
             "type": "array",
+            "minItems": 1,
             "items": {
                 "type": "object",
                 "additionalProperties": False,
                 "required": ["command", "outcome"],
                 "properties": {
-                    "command": {"type": "string"},
+                    "command": {"type": "string", "minLength": 1},
                     "outcome": {"enum": ["passed", "failed", "not_run"]},
                 },
             },
@@ -31,7 +33,22 @@ RESULT_SCHEMA: dict[str, Any] = {
         "pr_url": {"type": ["string", "null"]},
         "failure_reason": {"type": ["string", "null"]},
     },
+    "allOf": [
+        {
+            "if": {"properties": {"result": {"const": "pr_opened"}}},
+            "then": {
+                "properties": {
+                    "commit_sha": {"type": "string", "pattern": ".*\\S.*"},
+                    "pr_url": {"type": "string", "minLength": 1},
+                }
+            },
+            "else": {"properties": {"pr_url": {"type": "null"}}},
+        }
+    ],
 }
+SESSION_PAGE_SIZE = 200
+MAX_SESSION_LOOKUP_PAGES = 50
+CREATED_AFTER_CLOCK_SKEW_SECONDS = 300
 
 
 class DevinAPIError(RuntimeError):
@@ -42,14 +59,20 @@ class AmbiguousCreateError(DevinAPIError):
     pass
 
 
+class RateLimitedCreateError(DevinAPIError):
+    pass
+
+
 class DevinClient(Protocol):
     async def create_session(self, task: TaskRecord) -> DevinSession: ...
 
     async def get_session(self, session_id: str) -> DevinSession: ...
 
-    async def find_session_by_tag(self, tag: str) -> DevinSession | None: ...
+    async def find_session_by_tag(
+        self, tag: str, created_after: datetime
+    ) -> DevinSession | None: ...
 
-    async def terminate_session(self, session_id: str) -> DevinSession: ...
+    async def terminate_session(self, session_id: str) -> None: ...
 
     async def aclose(self) -> None: ...
 
@@ -74,23 +97,44 @@ class LiveDevinClient:
             response = await self.http.post(self.base_path, json=self._create_payload(task))
         except httpx.TransportError as error:
             raise AmbiguousCreateError("Session creation outcome is unknown") from error
+        if response.status_code == 429:
+            raise RateLimitedCreateError("Devin API rate-limited session creation")
         if response.status_code >= 500:
             raise AmbiguousCreateError("Session creation returned a server error")
         self._raise(response)
-        return DevinSession.model_validate(response.json())
+        try:
+            return _parse_session(_response_json(response))
+        except DevinAPIError as error:
+            raise AmbiguousCreateError(
+                "Session creation returned an invalid success response"
+            ) from error
 
     async def get_session(self, session_id: str) -> DevinSession:
         response = await self._request("GET", f"{self.base_path}/{session_id}")
-        return DevinSession.model_validate(response.json())
+        return _parse_session(_response_json(response))
 
-    async def find_session_by_tag(self, tag: str) -> DevinSession | None:
-        response = await self._request("GET", self.base_path, params={"first": 100})
-        sessions = _parse_sessions(response.json().get("items", []))
-        return next((session for session in sessions if tag in session.tags), None)
+    async def find_session_by_tag(self, tag: str, created_after: datetime) -> DevinSession | None:
+        cursor: str | None = None
+        seen_cursors: set[str] = set()
+        match: DevinSession | None = None
+        for _ in range(MAX_SESSION_LOOKUP_PAGES):
+            page = await self._session_page(cursor, created_after, tag)
+            for session in page["sessions"]:
+                if tag not in session.tags:
+                    continue
+                if match:
+                    raise DevinAPIError("Multiple Devin sessions have the same remediation tag")
+                match = session
+            if not page["has_next_page"]:
+                return match
+            cursor = page["end_cursor"]
+            if not cursor or cursor in seen_cursors:
+                raise DevinAPIError("Devin session pagination returned an invalid cursor")
+            seen_cursors.add(cursor)
+        raise DevinAPIError("Devin session lookup exceeded its page limit")
 
-    async def terminate_session(self, session_id: str) -> DevinSession:
-        response = await self._request("DELETE", f"{self.base_path}/{session_id}")
-        return DevinSession.model_validate(response.json())
+    async def terminate_session(self, session_id: str) -> None:
+        await self._request("DELETE", f"{self.base_path}/{session_id}")
 
     async def aclose(self) -> None:
         await self.http.aclose()
@@ -102,6 +146,21 @@ class LiveDevinClient:
             raise DevinAPIError("Devin API transport failure") from error
         self._raise(response)
         return response
+
+    async def _session_page(
+        self, cursor: str | None, created_after: datetime, tag: str
+    ) -> dict[str, Any]:
+        params: dict[str, int | str] = {
+            "first": SESSION_PAGE_SIZE,
+            "created_after": max(
+                0,
+                int(created_after.timestamp()) - CREATED_AFTER_CLOCK_SKEW_SECONDS,
+            ),
+        }
+        if cursor:
+            params["after"] = cursor
+        response = await self._request("GET", self.base_path, params=params)
+        return _parse_session_page(_response_json(response), tag)
 
     def _create_payload(self, task: TaskRecord) -> dict[str, Any]:
         tag = task_tag(task.id)
@@ -143,25 +202,22 @@ class FakeDevinClient:
         return session
 
     async def get_session(self, session_id: str) -> DevinSession:
-        session, polls = self.sessions[session_id]
+        stored = self.sessions.get(session_id)
+        session, polls = stored if stored else (self._rehydrate(session_id), 0)
         next_session = (
-            self._finished(session)
-            if polls
-            else session.model_copy(update={"status": "running"})
+            self._finished(session) if polls else session.model_copy(update={"status": "running"})
         )
         self.sessions[session_id] = (next_session, polls + 1)
         return next_session
 
-    async def find_session_by_tag(self, tag: str) -> DevinSession | None:
-        return next(
-            (session for session, _ in self.sessions.values() if tag in session.tags), None
-        )
+    async def find_session_by_tag(self, tag: str, created_after: datetime) -> DevinSession | None:
+        del created_after
+        return next((session for session, _ in self.sessions.values() if tag in session.tags), None)
 
-    async def terminate_session(self, session_id: str) -> DevinSession:
+    async def terminate_session(self, session_id: str) -> None:
         session, polls = self.sessions[session_id]
         terminated = session.model_copy(update={"status": "exit", "status_detail": None})
         self.sessions[session_id] = (terminated, polls)
-        return terminated
 
     async def aclose(self) -> None:
         return None
@@ -186,10 +242,55 @@ class FakeDevinClient:
             }
         )
 
+    def _rehydrate(self, session_id: str) -> DevinSession:
+        prefix = "devin-sim-"
+        if not session_id.startswith(prefix) or len(session_id) == len(prefix):
+            raise DevinAPIError("Simulated session cannot be reconstructed")
+        task_id = session_id.removeprefix(prefix)
+        return DevinSession(
+            session_id=session_id,
+            url=f"https://app.devin.ai/sessions/{session_id}",
+            status="running",
+            tags=[task_tag(task_id)],
+        )
+
 
 def task_tag(task_id: str) -> str:
     return f"remediation-task-{task_id}"
 
 
-def _parse_sessions(items: Sequence[object]) -> list[DevinSession]:
-    return [DevinSession.model_validate(item) for item in items]
+def _response_json(response: httpx.Response) -> object:
+    try:
+        return response.json()
+    except ValueError as error:
+        raise DevinAPIError("Devin API returned invalid JSON") from error
+
+
+def _parse_session(value: object) -> DevinSession:
+    try:
+        return DevinSession.model_validate(value)
+    except ValidationError as error:
+        raise DevinAPIError("Devin API returned an invalid session") from error
+
+
+def _parse_session_page(value: object, target_tag: str) -> dict[str, Any]:
+    if not isinstance(value, dict) or not isinstance(value.get("items"), list):
+        raise DevinAPIError("Devin API returned an invalid session page")
+    sessions = [
+        _parse_session(item)
+        for item in value["items"]
+        if isinstance(item, dict)
+        and isinstance(item.get("tags"), list)
+        and target_tag in item["tags"]
+    ]
+    has_next_page = value.get("has_next_page", False)
+    end_cursor = value.get("end_cursor")
+    if not isinstance(has_next_page, bool):
+        raise DevinAPIError("Devin API returned an invalid pagination flag")
+    if end_cursor is not None and not isinstance(end_cursor, str):
+        raise DevinAPIError("Devin API returned an invalid pagination cursor")
+    return {
+        "sessions": sessions,
+        "has_next_page": has_next_page,
+        "end_cursor": end_cursor,
+    }

@@ -32,7 +32,7 @@ signed webhook ingress -----> SQLite delivery/task/event ledger
 | Initiate Devin | `POST /v3/organizations/{org_id}/sessions` | Session ID and link |
 | Manage Devin | Durable polling and explicit blocked/failure mapping | State-transition history and current status |
 | Observable output | Devin-created PR against the fork | PR URL, state, and structured result |
-| Analytics | Counts, PR yield, cycle time, ACUs, progress, failures | HTML dashboard and `/api/metrics` |
+| Analytics | Counts, PR yield, cycle time, usage source, progress, failures | HTML dashboard and `/api/metrics` |
 | Working remediation | Real live sessions plus independent review, not only a fake demo | Issue-to-session-to-PR evidence table |
 | Docker | One-worker application image with persistent SQLite volume | Container smoke and restart tests |
 | Reproducible demo | Signed deterministic fake webhook through the real ingress path | README command and automated test |
@@ -61,15 +61,15 @@ are unique, so redelivery or relabeling cannot spend ACUs twice. A transaction p
 before any external call.
 
 Session creation is the only ambiguous operation: a timeout may occur after Devin accepted the
-request. Every session uses the task ID in its title and tags. The reconciler searches recent
-sessions for that tag before deciding that operator attention is required; it never blindly
-retries an ambiguous creation.
+request. Every session uses the task ID in its title and tags. The reconciler searches
+cursor-paginated sessions created near the task for that tag before deciding that operator
+attention is required; it never blindly retries an ambiguous creation.
 
 On restart, the live reconciler sweeps queued, creating, running, and needs-attention tasks. An
 ambiguous create with no session ID repeats tag-only discovery after a 30-second backoff, so a
 session hidden by eventual-consistency lag can be recovered without ever repeating the POST. The
-fake adapter intentionally guarantees restart persistence only after its simulated task is
-terminal; its remote-session state is in memory.
+fake adapter reconstructs deterministic `devin-sim-*` sessions after an active restart; this is a
+simulation-specific recovery mechanism, not a claim that remote state lives in SQLite.
 
 ## State model
 
@@ -80,10 +80,11 @@ queued -> creating -> running -> completed_with_pr
                     \--------> failed
 ```
 
-- `new`, `claimed`, `running`, and `resuming` remain active.
+- `new`, `creating`, `claimed`, `running`, and `resuming` remain active.
 - `waiting_for_user` and `waiting_for_approval` require attention.
 - A finished or waiting session is terminated only when it has a valid terminal result and any
-  claimed PR targets the fork. Invalid finished results stay attention-required.
+  claimed PR targets the fork. The validated result is persisted before DELETE so a crash cannot
+  erase the evidence. Invalid finished results stay attention-required.
 - `suspended` requires attention with its reason preserved.
 - `error` is a failed session.
 - `exit` is only lifecycle completion; it is not automatically business success.
@@ -102,7 +103,7 @@ The dashboard and JSON API expose:
 
 - accepted, queued, active, needs-attention, failed, and PR-producing task counts;
 - progress for each issue and links to the Devin session and PR;
-- cumulative ACUs per session and in total;
+- simulated ACUs or enterprise API-reported ACUs when applicable;
 - median issue-to-PR cycle time and PR production rate;
 - safe error codes and status details.
 
@@ -115,8 +116,14 @@ and full prompts are never logged.
 - One application process and one reconciler. Production would use Postgres plus a dedicated
   worker and lease-based claims.
 - Local SQLite is durable for the demo but not a multi-replica queue.
+- An atomic concurrency limit bounds simultaneous sessions. There is no automatic daily ACU
+  budget; the allowlisted human label is the aggregate-spend gate in this take-home.
+- Sessionless ambiguous creates consume concurrency slots. Filling every slot intentionally halts
+  intake until an operator verifies remote state; the MVP has no unsafe automatic abandon/requeue.
 - The default Compose file is simulation-only. Live mode requires the explicit
-  `compose.live.yaml` override and all three credentials; the simulator also checks backend mode.
+  `compose.live.yaml` override plus Devin, webhook, and operator credentials; the simulator also
+  checks backend mode.
 - An HTTPS tunnel provides the live GitHub delivery; deterministic simulation remains available.
-- No auto-merge, issue-comment bot, authentication platform, frontend framework, or enterprise
-  analytics are included.
+- Live operator routes use HTTP Basic authentication; a customer deployment would replace it with
+  SSO/RBAC. No auto-merge, issue-comment bot, frontend framework, or enterprise analytics are
+  included.
