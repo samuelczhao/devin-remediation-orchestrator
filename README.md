@@ -59,6 +59,12 @@ not report `mode=simulation`. Expected terminal evidence:
 - one Devin-reported passing test;
 - PR yield, cycle time, and simulated ACUs in `/api/metrics`.
 
+If port 8000 is already in use, bind a different loopback port without changing the container:
+
+```bash
+REMEDIATION_HOST_PORT=8001 docker compose up --build -d
+```
+
 Run the command again to demonstrate idempotency: `created` becomes `false`, and no second session
 is created. After the task is terminal, `docker compose restart` demonstrates that its ledger,
 session link, PR link, metrics, and simulated usage survive a process restart. The in-memory fake
