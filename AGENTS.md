@@ -22,3 +22,5 @@
   live settings in an explicit override and make the simulator verify server mode before posting.
 - A tag lookup immediately after an ambiguous session POST can miss an eventually visible session.
   Reconcile by repeating tag-only discovery with backoff; never repeat the paid create request.
+- Keep private rehearsal scripts and interview-positioning notes outside the submitted repository;
+  public documentation should contain implementation, evidence, and the final video link only.
