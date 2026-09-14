@@ -93,10 +93,12 @@ for the state model, failure handling, and access boundaries.
 
 ## Reading the dashboard
 
-The top panel shows engineering outcomes: independently verified regressions, GitHub approvals,
-merges, closed PRs, and fixes needing rework. Review notes are separate from GitHub decisions.
-Below that are the operational details: queued and active tasks, failures, PRs produced, session
-links, and time to the agent's result.
+The top panel shows independently verified regressions, GitHub approvals, merges, rejected fixes,
+and fixes needing rework. Review assessments are separate from GitHub decisions and session completion.
+Expand **PRs and review evidence** for individual proposals, or **Automation details** for the queue,
+session links, failures, usage, and turnaround. Page refresh pauses while details are open.
+The **Presentation view** link keeps it paused and opens the recorded export example when its
+verified commit matches. It uses the same data, not a separate set of demo results.
 
 GitHub outcomes come from a **manually refreshed snapshot**, with its timestamp shown. Missing
 checks are not counted as passing, and a changed PR commit invalidates its old review evidence.

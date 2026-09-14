@@ -147,7 +147,8 @@ def test_dashboard_exposes_operational_signals_and_security_headers(tmp_path: Pa
     assert "Tasks received" in response.text
     assert "Simulated ACUs" in response.text
     assert "Last attempt" in response.text
-    assert 'http-equiv="refresh"' in response.text
+    assert "/static/dashboard.js" in response.text
+    assert 'http-equiv="refresh"' not in response.text
     assert response.headers["cache-control"] == "no-store"
     assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
 
