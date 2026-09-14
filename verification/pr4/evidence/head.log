@@ -1,0 +1,30 @@
+.                                                                        [100%]
+==================================== PASSES ====================================
+________________ test_export_database_with_same_named_datasets _________________
+------------------------------ Captured log setup ------------------------------
+WARNING  superset.initialization:__init__.py:1075 --------------------------------------------------------------------------------
+                                    WARNING
+--------------------------------------------------------------------------------
+WARNING  superset.initialization:__init__.py:1076 SQLALCHEMY_ENCRYPTED_FIELD_ENGINE is set to the legacy 'aes' engine (AES-CBC, unauthenticated). App-encrypted fields — database passwords, SSH tunnel credentials, OAuth2 tokens, and similar — would benefit from the authenticated 'aes-gcm' engine instead.
+Switching engines on a populated database requires re-encrypting existing values first, since the two ciphertext formats are not interchangeable:
+  1. Back up the metadata database.
+  2. superset re-encrypt-secrets --engine aes-gcm
+  3. Set SQLALCHEMY_ENCRYPTED_FIELD_ENGINE = 'aes-gcm' in superset_config.py.
+  4. Restart Superset, then re-run the command above once more to sweep up any values written during the cutover.
+See UPDATING.md and docs/sip/authenticated-encryption-at-rest.md for the full runbook.
+WARNING  superset.initialization:__init__.py:1077 --------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+INFO     superset.subjects.hooks:hooks.py:83 Subject sync hooks registered
+INFO     alembic.runtime.migration:migration.py:207 Context impl SQLiteImpl.
+INFO     alembic.runtime.migration:migration.py:210 Will assume non-transactional DDL.
+INFO     superset.app:app.py:192 Pending database migrations: run 'superset db upgrade'
+INFO     superset.core.mcp.core_mcp_injection:core_mcp_injection.py:294 fastmcp is not installed, skipping MCP initialization. Install it with: pip install 'apache-superset[fastmcp]'
+--------------------------- Captured stdout teardown ---------------------------
+SOURCE VERIFIED: superset.commands.database.export from superset-d6394296de8682e5ead171f20b4167bee7b7971c
+SOURCE VERIFIED: superset.commands.dataset.export from superset-d6394296de8682e5ead171f20b4167bee7b7971c
+SOURCE VERIFIED: superset.connectors.sqla.models from superset-d6394296de8682e5ead171f20b4167bee7b7971c
+SOURCE VERIFIED: superset.models.core from superset-d6394296de8682e5ead171f20b4167bee7b7971c
+SOURCE VERIFIED: superset_core from superset-d6394296de8682e5ead171f20b4167bee7b7971c
+=========================== short test summary info ============================
+PASSED tests/unit_tests/datasets/commands/export_test.py::test_export_database_with_same_named_datasets
+1 passed in 1.09s

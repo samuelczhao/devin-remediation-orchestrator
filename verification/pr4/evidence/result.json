@@ -1,0 +1,94 @@
+{
+  "status": "verified",
+  "verified_at_utc": "2026-09-14T00:35:03.174027+00:00",
+  "platform": "macOS-26.3.1-arm64-arm-64bit",
+  "commits": {
+    "base": "e7dccd44a7c212739147155548e689e9d6b3408f",
+    "head": "d6394296de8682e5ead171f20b4167bee7b7971c"
+  },
+  "archive_sha256": {
+    "base": "8f59da60de81957d59ca7568913851c8705b4b8f373ed51bb936fc6f09016347",
+    "head": "065640b20dafedca7f09d892aca30c425cddeefe8d0c0a5e69b02b65fec7fd01"
+  },
+  "test_file_sha256": "e9ca2fc984463f7ff2af2701d55aa0396ba3032bde8797789c427382468a3b81",
+  "requirements_sha256": "c8a45776289c470bc639fa086f52cb317d1f51cb67854b18d3fa411176707b21",
+  "install_command": [
+    "/Users/samuelczhao/.local/bin/uv",
+    "pip",
+    "install",
+    "--python",
+    "/private/tmp/pr4-independent.2nnez5/venv/bin/python",
+    "-r",
+    "requirements/base.txt",
+    "pytest==9.1.1",
+    "pytest-mock==3.15.1",
+    "pytest-asyncio==1.4.0"
+  ],
+  "runs": {
+    "base": {
+      "command": [
+        "/private/tmp/pr4-independent.2nnez5/venv/bin/python",
+        "-m",
+        "pytest",
+        "--import-mode=importlib",
+        "--confcutdir=/private/tmp/pr4-independent.2nnez5/superset-d6394296de8682e5ead171f20b4167bee7b7971c/tests/unit_tests",
+        "/private/tmp/pr4-independent.2nnez5/superset-d6394296de8682e5ead171f20b4167bee7b7971c/tests/unit_tests/datasets/commands/export_test.py::test_export_database_with_same_named_datasets",
+        "-p",
+        "source_guard",
+        "-p",
+        "pytest_mock.plugin",
+        "-p",
+        "pytest_asyncio.plugin",
+        "-q",
+        "-rA",
+        "-p",
+        "no:cacheprovider",
+        "--junitxml=/Users/samuelczhao/Documents/Coding/Cognition/devin-remediation-orchestrator/verification/pr4/evidence/base.xml"
+      ],
+      "cwd": "/private/tmp/pr4-independent.2nnez5/superset-e7dccd44a7c212739147155548e689e9d6b3408f",
+      "environment": {
+        "PATH": "/bin:/usr/bin",
+        "SUPERSET_HOME": "/private/tmp/pr4-independent.2nnez5/runtime",
+        "SUPERSET_SECRET_KEY": "pr4-public-disposable-verification-only",
+        "PR4_SOURCE_ROOT": "/private/tmp/pr4-independent.2nnez5/superset-e7dccd44a7c212739147155548e689e9d6b3408f",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "PYTHONPATH": "/private/tmp/pr4-independent.2nnez5/superset-e7dccd44a7c212739147155548e689e9d6b3408f:/private/tmp/pr4-independent.2nnez5/superset-e7dccd44a7c212739147155548e689e9d6b3408f/superset-core/src:/Users/samuelczhao/Documents/Coding/Cognition/devin-remediation-orchestrator/verification/pr4"
+      },
+      "exit_code": 1,
+      "outcome": "expected assertion failure"
+    },
+    "head": {
+      "command": [
+        "/private/tmp/pr4-independent.2nnez5/venv/bin/python",
+        "-m",
+        "pytest",
+        "--import-mode=importlib",
+        "--confcutdir=/private/tmp/pr4-independent.2nnez5/superset-d6394296de8682e5ead171f20b4167bee7b7971c/tests/unit_tests",
+        "/private/tmp/pr4-independent.2nnez5/superset-d6394296de8682e5ead171f20b4167bee7b7971c/tests/unit_tests/datasets/commands/export_test.py::test_export_database_with_same_named_datasets",
+        "-p",
+        "source_guard",
+        "-p",
+        "pytest_mock.plugin",
+        "-p",
+        "pytest_asyncio.plugin",
+        "-q",
+        "-rA",
+        "-p",
+        "no:cacheprovider",
+        "--junitxml=/Users/samuelczhao/Documents/Coding/Cognition/devin-remediation-orchestrator/verification/pr4/evidence/head.xml"
+      ],
+      "cwd": "/private/tmp/pr4-independent.2nnez5/superset-d6394296de8682e5ead171f20b4167bee7b7971c",
+      "environment": {
+        "PATH": "/bin:/usr/bin",
+        "SUPERSET_HOME": "/private/tmp/pr4-independent.2nnez5/runtime",
+        "SUPERSET_SECRET_KEY": "pr4-public-disposable-verification-only",
+        "PR4_SOURCE_ROOT": "/private/tmp/pr4-independent.2nnez5/superset-d6394296de8682e5ead171f20b4167bee7b7971c",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "PYTHONPATH": "/private/tmp/pr4-independent.2nnez5/superset-d6394296de8682e5ead171f20b4167bee7b7971c:/private/tmp/pr4-independent.2nnez5/superset-d6394296de8682e5ead171f20b4167bee7b7971c/superset-core/src:/Users/samuelczhao/Documents/Coding/Cognition/devin-remediation-orchestrator/verification/pr4"
+      },
+      "exit_code": 0,
+      "outcome": "passed"
+    }
+  },
+  "python": "Python 3.12.13"
+}
