@@ -128,7 +128,7 @@ def create_app(
         )
 
     @app.get("/", response_class=HTMLResponse)
-    async def dashboard(request: Request) -> Response:
+    async def dashboard(request: Request, presentation: bool = False) -> Response:
         workflow_metrics = store.metrics()
         task_records = store.list_tasks()
         task_views = [
@@ -146,6 +146,7 @@ def create_app(
             request=request,
             name="index.html",
             context={
+                "presentation": presentation,
                 "mode": config.app_mode,
                 "metrics": workflow_metrics,
                 "median_cycle": _format_duration(workflow_metrics.median_cycle_seconds),

@@ -1,0 +1,25 @@
+<div class="table-wrap proposal-table">
+  <table>
+    <thead><tr><th>Proposal</th><th>Recorded assessment</th><th>GitHub</th><th>Evidence</th></tr></thead>
+    <tbody>
+      {% for row in outcomes.rows %}
+      <tr>
+        <td><a href="{{ row.pr_url }}">PR #{{ row.number }}</a><small>Issue #{{ row.issue_number }}</small></td>
+        <td><strong class="assessment {{ row.review_disposition }}">{{ row.review_disposition | replace('_', ' ') | title }}</strong>{% if row.independent_verification_url %}<small>Regression verified independently</small>{% elif row.review_disposition == 'candidate' %}<small>Not independently verified</small>{% endif %}</td>
+        <td><span class="status {{ row.github_state }}">{{ row.github_state | replace('_', ' ') }}</span><small>{{ row.github_review | replace('_', ' ') }}</small></td>
+        <td>
+          <details class="review-details">
+            <summary>Details and links</summary>
+            <p>{{ row.issue_title }}</p>
+            {% if row.review_note %}<p>{{ row.review_note }}</p>{% endif %}
+            <p class="check {{ row.ci_status }}">{% if row.ci_status == 'no_checks' %}No checks reported{% else %}CI: {{ row.ci_status | replace('_', ' ') | title }}{% endif %}</p>
+            {% if row.session_url %}<p><a href="{{ row.session_url }}">Devin session</a></p>{% endif %}
+            {% if row.independent_verification_url %}<p><a href="{{ row.independent_verification_url }}">Independent regression: fail before / pass after</a></p>{% endif %}
+            {% if row.review_source %}<p><a href="{{ row.review_source }}">Review notes</a> · {{ row.head_sha[:7] }}</p>{% endif %}
+          </details>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

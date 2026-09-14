@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta http-equiv="refresh" content="5">
+    {% if not presentation %}<script src="{{ url_for('static', path='/dashboard.js') }}" defer></script>{% endif %}
     <title>Devin Remediation Control Plane</title>
     <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
   </head>
@@ -12,17 +12,17 @@
       <header>
         <div>
           <p class="eyebrow">Engineering maintenance automation</p>
-          <h1>Devin Remediation Control Plane</h1>
-          <p>Follow proposed fixes through validation and review, not just PR creation.</p>
+          <h1>Remediation outcomes</h1>
+          <p>{{ metrics.total }} tasks received · {{ metrics.pr_produced }} PRs produced · {{ metrics.active }} active</p>
         </div>
         <span class="mode {{ mode }}">{{ mode | upper }}</span>
       </header>
 
-      <section class="panel outcomes" aria-label="Engineering outcomes">
+      <section class="panel outcomes" id="outcome-summary" aria-label="Engineering outcomes">
         <div class="panel-heading">
           <div>
             <p class="eyebrow">Engineering outcomes</p>
-            <h2>What happened after the PR?</h2>
+            <h2>Are the fixes ready to use?</h2>
           </div>
           {% if outcomes.checked_at %}<span>GitHub snapshot: {{ outcomes.checked_at }}<br>Manually refreshed, not live</span>{% endif %}
         </div>
@@ -32,26 +32,11 @@
           <article><strong>{{ outcomes.summary.regression_verified }}</strong><span>Regression verified</span></article>
           <article><strong>{{ outcomes.summary.approved if outcomes.summary.approved is not none else 'Unknown' }}</strong><span>GitHub approved</span></article>
           <article><strong>{{ outcomes.summary.merged }}</strong><span>Merged</span></article>
-          <article><strong>{{ outcomes.summary.needs_rework }}</strong><span>Needs rework · review notes</span></article>
-          <article><strong>{{ outcomes.summary.closed_unmerged }}</strong><span>Closed without merge</span></article>
+          <article class="rejected"><strong>{{ outcomes.summary.rejected }}</strong><span>Rejected · review notes</span></article>
+          <article class="needs-rework"><strong>{{ outcomes.summary.needs_rework }}</strong><span>Needs rework · review notes</span></article>
         </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Issue / proposal</th><th>Devin</th><th>GitHub decision</th><th>CI evidence</th><th>Recorded assessment</th></tr></thead>
-            <tbody>
-              {% for row in outcomes.rows %}
-              <tr>
-                <td><a href="{{ row.pr_url }}">PR #{{ row.number }}</a><small>Issue #{{ row.issue_number }} · {{ row.issue_title }}</small></td>
-                <td>{% if row.session_url %}<a href="{{ row.session_url }}">Session</a>{% else %}—{% endif %}</td>
-                <td><span class="status {{ row.github_state }}">{{ row.github_state | replace('_', ' ') }}</span><small>{{ row.github_review | replace('_', ' ') }}</small></td>
-                <td><span class="check {{ row.ci_status }}">{% if row.ci_status == 'no_checks' %}No checks reported{% else %}{{ row.ci_status | replace('_', ' ') | title }}{% endif %}</span></td>
-                <td><strong class="assessment {{ row.review_disposition }}">{{ row.review_disposition | replace('_', ' ') | title }}</strong>{% if row.review_note %}<small>{{ row.review_note }}</small>{% endif %}{% if row.independent_verification_url %}<small><a href="{{ row.independent_verification_url }}">Independent regression: fail before / pass after</a></small>{% endif %}{% if row.review_source %}<small><a href="{{ row.review_source }}">Review notes</a> · {{ row.head_sha[:7] }}</small>{% endif %}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        <p class="footnote">{{ outcomes.summary.tracked_prs }} proposals in this snapshot. Regression verified means a scoped check passed independently at the matching commit, not full integration coverage or merge approval. A candidate is not an approved fix, and missing CI is not a pass. Counts are separate signals, not funnel stages.</p>
+        <p class="footnote">Verification, human review, and merge are separate signals. A verified regression is not full-suite coverage or approval.</p>
+        <p class="footnote">CI: {{ outcomes.summary.ci_passed }} passed · {{ outcomes.summary.ci_failed }} failed · {{ outcomes.summary.ci_pending }} pending · {{ outcomes.summary.ci_no_checks }} without checks · {{ outcomes.summary.ci_unknown }} unknown.</p>
         {% endif %}
         {% if mode == 'simulation' %}
         <p>This run uses fixture outputs. It does not create a real PR or establish a successful fix.</p>
@@ -59,6 +44,21 @@
         <p class="footnote"><a href="https://github.com/samuelczhao/devin-remediation-orchestrator/blob/main/docs/EVIDENCE.md">Real-run evidence and verification limits</a> · Cost and reviewer effort have not been measured; no savings are claimed.</p>
       </section>
 
+      {% if worker_last_error %}<p class="notice">Worker error: {{ worker_last_error }}</p>{% endif %}
+      {% if metrics.failed or metrics.blocked or metrics.needs_attention %}<p class="notice">Run attention: {{ metrics.failed }} failed · {{ metrics.blocked }} blocked · {{ metrics.needs_attention }} awaiting input. These are session states, separate from PR review.</p>{% endif %}
+
+      {% if outcomes.available %}
+      <details class="panel proposal-details" {% if presentation %}open{% endif %}>
+        <summary>PRs and review evidence <span>{{ outcomes.summary.tracked_prs }} proposals</span></summary>
+        {% for row in outcomes.rows if mode == 'live' and row.number == 4 and row.head_sha == 'd6394296de8682e5ead171f20b4167bee7b7971c' and row.independent_verification_url %}
+        {% include 'export_evidence.html' %}
+        {% endfor %}
+        {% include 'outcome_rows.html' %}
+      </details>
+      {% endif %}
+
+      <details class="operational-details" {% if not outcomes.available %}open{% endif %}>
+        <summary>Automation details <span>Queue, sessions, usage, and errors</span></summary>
       <section class="metrics" aria-label="Automation activity">
         <article><strong>{{ metrics.total }}</strong><span>Tasks received</span></article>
         <article><strong>{{ metrics.queued }}</strong><span>Queued</span></article>
@@ -70,7 +70,6 @@
         <article><strong>{{ usage_summary.value }}</strong><span>{{ usage_summary.label }}</span></article>
         <article><strong>{{ median_cycle }}</strong><span>Median time to agent result</span></article>
       </section>
-
       <section class="panel">
         <div class="panel-heading">
           <div>
@@ -108,6 +107,8 @@
         </div>
         <p class="footnote">PR produced means the agent returned a valid artifact, even if its reported checks failed. It does not mean approved or correct. Times run from webhook acceptance to agent completion and exclude human review. Self-serve cost comes from Devin Billing, not the API ACU field.</p>
       </section>
+      </details>
+      <p class="footnote">{% if presentation %}Presentation view · page auto-refresh paused. <a href="/">Return to auto-refresh</a>{% else %}Page refresh pauses while details are open. <a href="?presentation=true">Presentation view</a> keeps it paused.{% endif %} <a href="">Refresh now</a>. GitHub outcomes use the timestamped snapshot above.</p>
     </main>
   </body>
 </html>

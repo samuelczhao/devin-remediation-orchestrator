@@ -7,7 +7,7 @@
 
 * { box-sizing: border-box; }
 body { margin: 0; background: radial-gradient(circle at top, #172033, #0b0d10 48%); }
-main { width: min(1180px, calc(100% - 40px)); margin: 0 auto; padding: 56px 0; }
+main { width: min(1280px, calc(100% - 40px)); margin: 0 auto; padding: 32px 0; }
 header, .panel-heading { display: flex; justify-content: space-between; gap: 24px; align-items: start; }
 h1 { margin: 6px 0 8px; font-size: clamp(32px, 5vw, 54px); letter-spacing: -0.04em; }
 h2 { margin: 4px 0; }
@@ -51,9 +51,37 @@ td > strong { color: #ffadb7; font-size: 12px; }
 .assessment.rejected, .check.failed { color: #ffadb7; }
 .check.passed { color: #7ff0be; }
 .notice { padding: 12px 16px; border-left: 3px solid #e0bd65; background: #262317; font-size: 13px; }
+.outcome-metrics .rejected strong, .test-failed { color: #ffadb7; }
+.outcome-metrics .needs-rework strong { color: #f4d77b; }
+.test-passed { color: #7ff0be; }
+summary { cursor: pointer; font-weight: 650; }
+summary span { margin-left: 12px; color: #91a0b5; font-size: 13px; font-weight: 400; }
+summary:focus-visible, a:focus-visible { outline: 2px solid #a8c7ff; outline-offset: 5px; }
+.proposal-details, .operational-details { margin-top: 24px; }
+.operational-details { padding: 22px 24px; border: 1px solid #263143; border-radius: 18px; }
+.proposal-table { margin-top: 24px; }
+.review-details { max-width: 390px; }
+.review-details summary { color: #a8c7ff; font-size: 13px; }
+.review-details p { font-size: 13px; line-height: 1.5; }
+.assessment.candidate { font-weight: 650; }
+.export-evidence { margin-top: 28px; padding: 24px; background: #141b26; border: 1px solid #344254; border-radius: 12px; scroll-margin-top: 20px; }
+.export-evidence > summary { font-size: 24px; }
+.export-evidence > p { font-size: 16px; line-height: 1.5; }
+.evidence-comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.evidence-comparison article { min-width: 0; border: 1px solid #344254; border-radius: 8px; padding: 18px; }
+.evidence-comparison h3 { margin: 0 0 16px; font-size: 19px; }
+.evidence-comparison h3 span { margin-left: 8px; color: #91a0b5; font: 13px ui-monospace, monospace; }
+.evidence-comparison pre { min-height: 130px; margin: 0; font-size: 14px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.evidence-comparison p { min-height: 45px; font-size: 15px; line-height: 1.5; }
+.evidence-comparison strong { font-size: 24px; }
+.export-evidence > .evidence-scope { max-width: 950px; font-size: 14px; }
+.export-evidence > .footnote { font-size: 12px; }
+.return-summary { display: inline-block; margin-top: 20px; font-size: 15px; }
 
 @media (max-width: 800px) {
   .metrics { grid-template-columns: repeat(2, 1fr); }
   header, .panel-heading { flex-direction: column; }
   .worker-health { text-align: left; }
+  .evidence-comparison { grid-template-columns: 1fr; }
+  .export-evidence { padding: 16px; }
 }

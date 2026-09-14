@@ -1,0 +1,28 @@
+<details class="export-evidence" id="verified-example" {% if presentation %}open{% endif %}>
+  <summary>Verified example: two datasets, one lost export</summary>
+  <p>The test exports <code>prod.users</code> and <code>dev.users</code>. The original code gives both the same filename.</p>
+  <div class="evidence-comparison">
+    <article>
+      <h3>Before <span>e7dccd4</span></h3>
+      <pre><code>ds_file_name = get_filename(
+    dataset.table_name, dataset.id, skip_id=True
+)
+file_path = f"datasets/{db_file_name}/{ds_file_name}.yaml"</code></pre>
+      <p>Only <code>users.yaml</code> survives.</p>
+      <strong class="test-failed">1 failed</strong>
+    </article>
+    <article>
+      <h3>Devin's fix <span>d639429</span></h3>
+      <pre><code>for dataset in model.tables:
+    yield (
+        ExportDatasetsCommand._file_name(dataset),
+        functools.partial(ExportDatasetsCommand._file_content, dataset),
+    )</code></pre>
+      <p>The shared exporter keeps IDs: <code>users_1.yaml</code> + <code>users_2.yaml</code>.</p>
+      <strong class="test-passed">1 passed</strong>
+    </article>
+  </div>
+  <p class="evidence-scope">Same Devin-authored regression, independently executed against real Superset + SQLite. One focused test, not full-suite coverage or merge approval.</p>
+  <p class="footnote">Source excerpts: <a href="https://github.com/samuelczhao/superset/blob/e7dccd44a7c212739147155548e689e9d6b3408f/superset/commands/database/export.py#L126-L129">original</a> · <a href="https://github.com/samuelczhao/superset/blob/d6394296de8682e5ead171f20b4167bee7b7971c/superset/commands/database/export.py#L125-L129">fix</a> · <a href="{{ row.independent_verification_url }}">Full test report and logs</a></p>
+  <a class="return-summary" href="#outcome-summary">Back to outcome summary ↑</a>
+</details>
