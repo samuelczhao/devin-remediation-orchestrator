@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.212" timestamp="2026-09-13T17:35:04.901285-07:00" hostname="MacBook-Pro-8.local"><testcase classname="tests.unit_tests.datasets.commands.export_test" name="test_export_database_with_same_named_datasets" time="1.109"><failure message="AssertionError: assert ['datasets/my...e/users.yaml'] == ['datasets/my...users_2.yaml']&#10;  &#10;  At index 0 diff: 'datasets/my_database/users.yaml' != 'datasets/my_database/users_1.yaml'&#10;  Right contains one more item: 'datasets/my_database/users_2.yaml'&#10;  Use -v to get more diff">session = &lt;sqlalchemy.orm.session.Session object at 0x115c82660&gt;
+
+    def test_export_database_with_same_named_datasets(session: Session) -&gt; None:
+        """
+        A database export must include same-named datasets at distinct paths.
+    
+        Related datasets are serialized through ``ExportDatasetsCommand``, so their
+        filenames are disambiguated by dataset id and their JSON-backed fields are
+        normalized to dictionaries, as the import schema expects.
+        """
+        from superset.commands.database.export import ExportDatabasesCommand
+        from superset.connectors.sqla.models import SqlaTable
+        from superset.models.core import Database
+    
+        engine = db.session.get_bind()
+        SqlaTable.metadata.create_all(engine)  # pylint: disable=no-member
+    
+        database = Database(database_name="my_database", sqlalchemy_uri="sqlite://")
+        db.session.add(database)
+        db.session.flush()
+    
+        prod = SqlaTable(
+            table_name="users",
+            schema="prod",
+            database=database,
+            params=json.dumps({"remote_id": 64}),
+            template_params=json.dumps({"answer": "42"}),
+            extra=json.dumps({"warning_markdown": "*WARNING*"}),
+        )
+        dev = SqlaTable(table_name="users", schema="dev", database=database)
+        db.session.add_all([prod, dev])
+        db.session.flush()
+    
+        contents = {
+            path: content_fn()
+            for path, content_fn in ExportDatabasesCommand._export(database)  # pylint: disable=protected-access
+        }
+    
+&gt;       assert sorted(path for path in contents if path.startswith("datasets/")) == sorted(
+            [
+                f"datasets/my_database/users_{prod.id}.yaml",
+                f"datasets/my_database/users_{dev.id}.yaml",
+            ]
+        )
+E       AssertionError: assert ['datasets/my...e/users.yaml'] == ['datasets/my...users_2.yaml']
+E         
+E         At index 0 diff: 'datasets/my_database/users.yaml' != 'datasets/my_database/users_1.yaml'
+E         Right contains one more item: 'datasets/my_database/users_2.yaml'
+E         Use -v to get more diff
+
+../superset-d6394296de8682e5ead171f20b4167bee7b7971c/tests/unit_tests/datasets/commands/export_test.py:418: AssertionError</failure></testcase></testsuite></testsuites>

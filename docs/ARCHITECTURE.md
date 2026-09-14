@@ -26,14 +26,14 @@ signed webhook ingress -----> SQLite delivery/task/event ledger
 
 | Assignment requirement | Implementation | Completion evidence |
 | --- | --- | --- |
-| Fork Apache Superset | Public `samuelczhao/superset` fork pinned to the inspected commit | Fork URL and commit SHA in README |
+| Fork Apache Superset | Public `samuelczhao/superset` fork pinned to the inspected commit | Fork URL in README; commit SHA in the evidence report |
 | Identify issues | Three initial defects plus one corrective issue with bounded acceptance criteria | Public issues in the fork |
 | Event trigger | `issues.labeled` webhook for `devin:ready` | GitHub delivery plus persisted delivery ID |
 | Initiate Devin | `POST /v3/organizations/{org_id}/sessions` | Session ID and link |
 | Manage Devin | Durable polling and explicit blocked/failure mapping | Recorded baseline sessions plus automated current-path coverage |
 | Observable output | Devin-created PR against the fork | PR URL, state, and structured result |
-| Analytics | Counts, PR yield, cycle time, usage source, progress, failures | HTML dashboard and `/api/metrics` |
-| Working remediation | Real sessions plus independent review, with production limits preserved | Issue-to-session-to-PR evidence table |
+| Analytics | Operational counts plus separately sourced review/CI/merge outcomes | HTML dashboard, `/api/metrics`, and `/api/outcomes` |
+| Working remediation | Real sessions plus independently executed PR #4 regression, with limits preserved | Before/after logs and issue-to-session-to-PR evidence table |
 | Docker | One-worker application image with persistent SQLite volume | Container smoke and restart tests |
 | Reproducible demo | Signed deterministic fake webhook through the real ingress path | README command and automated test |
 | Five-minute presentation | What, How, Why, When narrative grounded in observed results | Loom link supplied separately with the assignment |
@@ -51,8 +51,8 @@ GitHub issue text is untrusted. A request is accepted only when all of these che
 
 The issue body is truncated and control characters are removed before prompting. Devin gets no
 session secrets. Each session explicitly targets only the fork; production setup should also
-restrict the GitHub installation to that repository. Sessions have an ACU cap, create PRs only,
-and cannot merge.
+restrict the GitHub installation to that repository. Sessions have an ACU cap and are instructed
+to create PRs without merging. Merge protection comes from GitHub branch rules, not the prompt.
 
 ## Ownership and idempotency
 
@@ -84,18 +84,27 @@ queued -> creating -> running -> completed_with_pr
 - `waiting_for_user` and `waiting_for_approval` require attention.
 - A finished or waiting session is terminated only when it has a valid terminal result and any
   claimed PR targets the fork. The validated result is persisted before DELETE so a crash cannot
-  erase the evidence. Invalid finished results stay attention-required.
+  erase the evidence. Cleanup resumes from that saved result and requests session archival;
+  it does not depend on a subsequent GET retaining the output. An already-missing session is
+  treated as cleaned up. Invalid finished results stay attention-required.
 - `suspended` requires attention with its reason preserved.
 - `error` is a failed session.
 - `exit` is only lifecycle completion; it is not automatically business success.
 
 ## Success semantics
 
-The dashboard reports **PR production rate**, not correctness. A task is
+The task ledger reports **PR production rate**, not correctness. A task is
 `completed_with_pr` only when Devin is terminal, structured output is valid, and the PR URL points
 to `samuelczhao/superset`. Devin-reported tests are labeled as such. The final evidence separately
 records targeted test and GitHub CI results; no three-run sample is used to claim broad productivity
-or quality improvements.
+or quality improvements. Reported failing tests can accompany a produced PR.
+
+The Engineering outcomes panel separately joins a manually refreshed GitHub snapshot to tracked
+PR URLs. GitHub approvals and merges never derive from local review notes or agent output.
+Review notes and independent regression evidence apply only at their pinned head SHA. A changed
+head invalidates them; a snapshot older than 24 hours is visibly stale. Missing or partial snapshot
+coverage produces an unavailable report rather than zero successes. This is a read-only report,
+not a new worker or an automatic review/merge system.
 
 ## Observability
 
@@ -106,6 +115,9 @@ The dashboard and JSON API expose:
 - simulated ACUs or enterprise API-reported ACUs when applicable;
 - median issue-to-PR cycle time and PR production rate;
 - safe error codes and status details.
+
+`/api/outcomes` adds timestamped GitHub PR/review/CI facts and separate recorded assessments.
+Simulation never borrows real outcome counts, and fixture session/PR links are not clickable.
 
 The acceptance log records task and issue IDs; the SQLite event ledger records every state change,
 and per-task error codes preserve session failures. Tokens, signatures, raw bodies, issue bodies,

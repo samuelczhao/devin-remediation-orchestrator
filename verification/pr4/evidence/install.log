@@ -1,0 +1,8 @@
+Using Python 3.12.13 environment at: /private/tmp/pr4-independent.2nnez5/venv
+Resolved 154 packages in 96ms
+   Building apache-superset-core @ file:///private/tmp/pr4-independent.2nnez5/superset-d6394296de8682e5ead171f20b4167bee7b7971c/superset-core
+      Built apache-superset-core @ file:///private/tmp/pr4-independent.2nnez5/superset-d6394296de8682e5ead171f20b4167bee7b7971c/superset-core
+Prepared 1 package in 482ms
+Uninstalled 1 package in 0.94ms
+Installed 1 package in 2ms
+ ~ apache-superset-core==0.1.0 (from file:///private/tmp/pr4-independent.2nnez5/superset-d6394296de8682e5ead171f20b4167bee7b7971c/superset-core)

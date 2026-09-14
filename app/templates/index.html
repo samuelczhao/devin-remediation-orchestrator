@@ -13,29 +13,68 @@
         <div>
           <p class="eyebrow">Engineering maintenance automation</p>
           <h1>Devin Remediation Control Plane</h1>
-          <p>Trusted GitHub issue events become bounded, observable coding sessions.</p>
+          <p>Follow proposed fixes through validation and review, not just PR creation.</p>
         </div>
         <span class="mode {{ mode }}">{{ mode | upper }}</span>
       </header>
 
-      <section class="metrics" aria-label="Workflow metrics">
-        <article><strong>{{ metrics.total }}</strong><span>Accepted</span></article>
+      <section class="panel outcomes" aria-label="Engineering outcomes">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Engineering outcomes</p>
+            <h2>What happened after the PR?</h2>
+          </div>
+          {% if outcomes.checked_at %}<span>GitHub snapshot: {{ outcomes.checked_at }}<br>Manually refreshed, not live</span>{% endif %}
+        </div>
+        {% if outcomes.warning %}<p class="notice">{{ outcomes.warning }}</p>{% endif %}
+        {% if outcomes.available %}
+        <div class="metrics outcome-metrics">
+          <article><strong>{{ outcomes.summary.regression_verified }}</strong><span>Regression verified</span></article>
+          <article><strong>{{ outcomes.summary.approved if outcomes.summary.approved is not none else 'Unknown' }}</strong><span>GitHub approved</span></article>
+          <article><strong>{{ outcomes.summary.merged }}</strong><span>Merged</span></article>
+          <article><strong>{{ outcomes.summary.needs_rework }}</strong><span>Needs rework · review notes</span></article>
+          <article><strong>{{ outcomes.summary.closed_unmerged }}</strong><span>Closed without merge</span></article>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Issue / proposal</th><th>Devin</th><th>GitHub decision</th><th>CI evidence</th><th>Recorded assessment</th></tr></thead>
+            <tbody>
+              {% for row in outcomes.rows %}
+              <tr>
+                <td><a href="{{ row.pr_url }}">PR #{{ row.number }}</a><small>Issue #{{ row.issue_number }} · {{ row.issue_title }}</small></td>
+                <td>{% if row.session_url %}<a href="{{ row.session_url }}">Session</a>{% else %}—{% endif %}</td>
+                <td><span class="status {{ row.github_state }}">{{ row.github_state | replace('_', ' ') }}</span><small>{{ row.github_review | replace('_', ' ') }}</small></td>
+                <td><span class="check {{ row.ci_status }}">{% if row.ci_status == 'no_checks' %}No checks reported{% else %}{{ row.ci_status | replace('_', ' ') | title }}{% endif %}</span></td>
+                <td><strong class="assessment {{ row.review_disposition }}">{{ row.review_disposition | replace('_', ' ') | title }}</strong>{% if row.review_note %}<small>{{ row.review_note }}</small>{% endif %}{% if row.independent_verification_url %}<small><a href="{{ row.independent_verification_url }}">Independent regression: fail before / pass after</a></small>{% endif %}{% if row.review_source %}<small><a href="{{ row.review_source }}">Review notes</a> · {{ row.head_sha[:7] }}</small>{% endif %}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="footnote">{{ outcomes.summary.tracked_prs }} proposals in this snapshot. Regression verified means a scoped check passed independently at the matching commit, not full integration coverage or merge approval. A candidate is not an approved fix, and missing CI is not a pass. Counts are separate signals, not funnel stages.</p>
+        {% endif %}
+        {% if mode == 'simulation' %}
+        <p>This run uses fixture outputs. It does not create a real PR or establish a successful fix.</p>
+        {% endif %}
+        <p class="footnote"><a href="https://github.com/samuelczhao/devin-remediation-orchestrator/blob/main/docs/EVIDENCE.md">Real-run evidence and verification limits</a> · Cost and reviewer effort have not been measured; no savings are claimed.</p>
+      </section>
+
+      <section class="metrics" aria-label="Automation activity">
+        <article><strong>{{ metrics.total }}</strong><span>Tasks received</span></article>
         <article><strong>{{ metrics.queued }}</strong><span>Queued</span></article>
         <article><strong>{{ metrics.active }}</strong><span>Active</span></article>
-        <article><strong>{{ metrics.needs_attention }}</strong><span>Needs attention</span></article>
+        <article><strong>{{ metrics.needs_attention }}</strong><span>Agent needs attention</span></article>
         <article><strong>{{ metrics.blocked }}</strong><span>Blocked</span></article>
-        <article><strong>{{ metrics.failed }}</strong><span>Failed</span></article>
+        <article><strong>{{ metrics.failed }}</strong><span>Failed runs</span></article>
         <article><strong>{{ metrics.pr_produced }}</strong><span>PRs produced</span></article>
-        <article><strong>{{ metrics.pr_yield }}</strong><span>PR yield</span></article>
-        <article><strong>{{ metrics.terminal }}</strong><span>Terminal</span></article>
         <article><strong>{{ usage_summary.value }}</strong><span>{{ usage_summary.label }}</span></article>
-        <article><strong>{{ median_cycle }}</strong><span>Median cycle</span></article>
+        <article><strong>{{ median_cycle }}</strong><span>Median time to agent result</span></article>
       </section>
 
       <section class="panel">
         <div class="panel-heading">
           <div>
-            <p class="eyebrow">Live task ledger</p>
+            <p class="eyebrow">Automation activity</p>
             <h2>Issue-to-PR progress</h2>
           </div>
           <div class="worker-health">
@@ -47,15 +86,15 @@
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Issue</th><th>Workflow</th><th>Devin</th><th>PR artifact</th><th>Devin tests</th><th>Error</th><th>ACUs</th><th>Updated</th></tr>
+              <tr><th>Issue</th><th>Workflow</th><th>Devin</th><th>PR artifact</th><th>Reported checks</th><th>Error</th><th>Usage</th><th>Updated</th></tr>
             </thead>
             <tbody>
               {% for task in tasks %}
               <tr>
                 <td><a href="{{ task.issue_url }}">#{{ task.issue_number }} {{ task.issue_title }}</a></td>
                 <td><span class="status {{ task.state }}">{{ task.state_label }}</span></td>
-                <td>{% if task.session_url %}<a href="{{ task.session_url }}">Session</a>{% else %}—{% endif %}</td>
-                <td>{% if task.pr_url %}<a href="{{ task.pr_url }}">Pull request</a><small>{{ task.pr_state or "state unavailable" }} at session completion</small>{% else %}—{% endif %}</td>
+                <td>{% if task.session_url %}{% if mode == 'simulation' %}Simulated session{% else %}<a href="{{ task.session_url }}">Session</a>{% endif %}{% else %}—{% endif %}</td>
+                <td>{% if task.pr_url %}{% if mode == 'simulation' %}Simulated PR<small>Fixture only · no GitHub PR created</small>{% else %}<a href="{{ task.pr_url }}">Pull request</a><small>{{ task.pr_state or "state unavailable" }} at session completion</small>{% endif %}{% else %}—{% endif %}</td>
                 <td>{{ task.test_summary }}</td>
                 <td>{% if task.error_code %}<strong>{{ task.error_code }}</strong><small>{{ task.error_detail }}</small>{% else %}—{% endif %}</td>
                 <td>{{ task.usage_display }}</td>
@@ -67,7 +106,7 @@
             </tbody>
           </table>
         </div>
-        <p class="footnote">PR yield measures workflow output, not correctness. Test results in session output are Devin-reported until independently confirmed by CI. Self-serve quota, credits, and cost come from Devin Billing, not the API ACU field.</p>
+        <p class="footnote">PR produced means the agent returned a valid artifact, even if its reported checks failed. It does not mean approved or correct. Times run from webhook acceptance to agent completion and exclude human review. Self-serve cost comes from Devin Billing, not the API ACU field.</p>
       </section>
     </main>
   </body>

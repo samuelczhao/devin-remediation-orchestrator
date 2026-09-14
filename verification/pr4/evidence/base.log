@@ -1,0 +1,82 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+________________ test_export_database_with_same_named_datasets _________________
+
+session = <sqlalchemy.orm.session.Session object at 0x115c82660>
+
+    def test_export_database_with_same_named_datasets(session: Session) -> None:
+        """
+        A database export must include same-named datasets at distinct paths.
+    
+        Related datasets are serialized through ``ExportDatasetsCommand``, so their
+        filenames are disambiguated by dataset id and their JSON-backed fields are
+        normalized to dictionaries, as the import schema expects.
+        """
+        from superset.commands.database.export import ExportDatabasesCommand
+        from superset.connectors.sqla.models import SqlaTable
+        from superset.models.core import Database
+    
+        engine = db.session.get_bind()
+        SqlaTable.metadata.create_all(engine)  # pylint: disable=no-member
+    
+        database = Database(database_name="my_database", sqlalchemy_uri="sqlite://")
+        db.session.add(database)
+        db.session.flush()
+    
+        prod = SqlaTable(
+            table_name="users",
+            schema="prod",
+            database=database,
+            params=json.dumps({"remote_id": 64}),
+            template_params=json.dumps({"answer": "42"}),
+            extra=json.dumps({"warning_markdown": "*WARNING*"}),
+        )
+        dev = SqlaTable(table_name="users", schema="dev", database=database)
+        db.session.add_all([prod, dev])
+        db.session.flush()
+    
+        contents = {
+            path: content_fn()
+            for path, content_fn in ExportDatabasesCommand._export(database)  # pylint: disable=protected-access
+        }
+    
+>       assert sorted(path for path in contents if path.startswith("datasets/")) == sorted(
+            [
+                f"datasets/my_database/users_{prod.id}.yaml",
+                f"datasets/my_database/users_{dev.id}.yaml",
+            ]
+        )
+E       AssertionError: assert ['datasets/my...e/users.yaml'] == ['datasets/my...users_2.yaml']
+E         
+E         At index 0 diff: 'datasets/my_database/users.yaml' != 'datasets/my_database/users_1.yaml'
+E         Right contains one more item: 'datasets/my_database/users_2.yaml'
+E         Use -v to get more diff
+
+../superset-d6394296de8682e5ead171f20b4167bee7b7971c/tests/unit_tests/datasets/commands/export_test.py:418: AssertionError
+------------------------------ Captured log setup ------------------------------
+WARNING  superset.initialization:__init__.py:1075 --------------------------------------------------------------------------------
+                                    WARNING
+--------------------------------------------------------------------------------
+WARNING  superset.initialization:__init__.py:1076 SQLALCHEMY_ENCRYPTED_FIELD_ENGINE is set to the legacy 'aes' engine (AES-CBC, unauthenticated). App-encrypted fields — database passwords, SSH tunnel credentials, OAuth2 tokens, and similar — would benefit from the authenticated 'aes-gcm' engine instead.
+Switching engines on a populated database requires re-encrypting existing values first, since the two ciphertext formats are not interchangeable:
+  1. Back up the metadata database.
+  2. superset re-encrypt-secrets --engine aes-gcm
+  3. Set SQLALCHEMY_ENCRYPTED_FIELD_ENGINE = 'aes-gcm' in superset_config.py.
+  4. Restart Superset, then re-run the command above once more to sweep up any values written during the cutover.
+See UPDATING.md and docs/sip/authenticated-encryption-at-rest.md for the full runbook.
+WARNING  superset.initialization:__init__.py:1077 --------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+INFO     superset.subjects.hooks:hooks.py:83 Subject sync hooks registered
+INFO     alembic.runtime.migration:migration.py:207 Context impl SQLiteImpl.
+INFO     alembic.runtime.migration:migration.py:210 Will assume non-transactional DDL.
+INFO     superset.app:app.py:192 Pending database migrations: run 'superset db upgrade'
+INFO     superset.core.mcp.core_mcp_injection:core_mcp_injection.py:294 fastmcp is not installed, skipping MCP initialization. Install it with: pip install 'apache-superset[fastmcp]'
+--------------------------- Captured stdout teardown ---------------------------
+SOURCE VERIFIED: superset.commands.database.export from superset-e7dccd44a7c212739147155548e689e9d6b3408f
+SOURCE VERIFIED: superset.commands.dataset.export from superset-e7dccd44a7c212739147155548e689e9d6b3408f
+SOURCE VERIFIED: superset.connectors.sqla.models from superset-e7dccd44a7c212739147155548e689e9d6b3408f
+SOURCE VERIFIED: superset.models.core from superset-e7dccd44a7c212739147155548e689e9d6b3408f
+SOURCE VERIFIED: superset_core from superset-e7dccd44a7c212739147155548e689e9d6b3408f
+=========================== short test summary info ============================
+FAILED ../superset-d6394296de8682e5ead171f20b4167bee7b7971c/tests/unit_tests/datasets/commands/export_test.py::test_export_database_with_same_named_datasets
+1 failed in 1.21s

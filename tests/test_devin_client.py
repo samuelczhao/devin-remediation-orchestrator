@@ -100,7 +100,27 @@ async def test_terminate_session_uses_organization_endpoint() -> None:
     client = LiveDevinClient(live_settings())
     await client.terminate_session("devin-1")
     assert route.called
+    assert route.calls.last.request.url.params["archive"] == "true"
     await client.aclose()
+
+
+@pytest.mark.parametrize("status_code", [404, 403])
+@respx.mock
+async def test_termination_distinguishes_missing_session_from_permission_failure(
+    status_code: int,
+) -> None:
+    respx.delete("https://api.devin.ai/v3/organizations/org-test/sessions/devin-1").mock(
+        return_value=httpx.Response(status_code)
+    )
+    client = LiveDevinClient(live_settings())
+    try:
+        if status_code == 404:
+            await client.terminate_session("devin-1")
+        else:
+            with pytest.raises(DevinAPIError):
+                await client.terminate_session("devin-1")
+    finally:
+        await client.aclose()
 
 
 @respx.mock

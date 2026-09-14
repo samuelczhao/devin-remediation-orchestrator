@@ -176,7 +176,7 @@ async def test_reconciler_recovers_ambiguous_create_after_lookup_lag(
     assert updated.session_id == recovered.session_id
 
 
-async def test_fake_client_progresses_to_target_pr() -> None:
+async def test_fake_client_lookup_returns_none_for_unknown_tag() -> None:
     client = FakeDevinClient(REPOSITORY)
     assert await client.find_session_by_tag("missing", datetime.now(UTC)) is None
 
@@ -455,21 +455,32 @@ async def test_crash_after_rate_limit_retry_recovers_without_second_post(
 
 
 class CrashOnceTerminateClient(FakeDevinClient):
-    def __init__(self, repository: str) -> None:
+    def __init__(self, repository: str, unavailable_after_delete: bool) -> None:
         super().__init__(repository)
         self.crashed = False
+        self.unavailable_after_delete = unavailable_after_delete
 
     async def get_session(self, session_id: str) -> DevinSession:
+        if self.crashed and self.unavailable_after_delete:
+            raise DevinAPIError("Devin API returned HTTP 404", 404)
         return self.sessions[session_id][0]
 
     async def terminate_session(self, session_id: str) -> None:
+        await super().terminate_session(session_id)
         if not self.crashed:
             self.crashed = True
+            completed, polls = self.sessions[session_id]
+            self.sessions[session_id] = (
+                completed.model_copy(update={"structured_output": None, "pull_requests": []}),
+                polls,
+            )
             raise SystemExit("simulated process death after remote termination")
-        await super().terminate_session(session_id)
 
 
-async def test_crash_during_termination_preserves_pending_evidence(tmp_path: Path) -> None:
+@pytest.mark.parametrize("unavailable_after_delete", [False, True])
+async def test_crash_after_termination_preserves_pending_evidence(
+    tmp_path: Path, unavailable_after_delete: bool
+) -> None:
     store = TaskStore(tmp_path / "tasks.db")
     store.initialize()
     task, _ = store.register("delivery-1", issue_payload())
@@ -488,7 +499,7 @@ async def test_crash_during_termination_preserves_pending_evidence(tmp_path: Pat
         },
         pull_requests=[DevinPullRequest(pr_url=pr_url, pr_state="open")],
     )
-    client = CrashOnceTerminateClient(REPOSITORY)
+    client = CrashOnceTerminateClient(REPOSITORY, unavailable_after_delete)
     client.sessions["devin-test"] = (completed, 0)
     orchestrator = Orchestrator(store, client, Settings())
 
@@ -500,8 +511,12 @@ async def test_crash_during_termination_preserves_pending_evidence(tmp_path: Pat
     assert pending.error_code == "session_termination_pending"
     assert pending.pr_url == pr_url
     assert pending.structured_output == completed.structured_output
+    assert client.sessions["devin-test"][0].status == "exit"
 
-    await orchestrator.run_once()
-    terminal = store.get(task.id)
+    restarted_store = TaskStore(tmp_path / "tasks.db")
+    await Orchestrator(restarted_store, client, Settings()).run_once()
+    terminal = restarted_store.get(task.id)
     assert terminal is not None
     assert terminal.state == TaskState.COMPLETED_WITH_PR
+    assert terminal.pr_url == pr_url
+    assert terminal.structured_output == completed.structured_output

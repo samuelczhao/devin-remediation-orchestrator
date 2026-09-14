@@ -24,3 +24,8 @@
   Reconcile by repeating tag-only discovery with backoff; never repeat the paid create request.
 - Keep private rehearsal scripts and interview-positioning notes outside the submitted repository;
   public documentation should contain implementation, evidence, and the final video link only.
+- Crash-after-action tests must change the simulated remote state before raising. Cleanup must
+  retain its saved result even when a later GET no longer returns that evidence.
+- Audit customer acceptance separately from orchestration success. A produced PR, passing
+  orchestrator tests, or a local review candidate cannot stand in for a verified target fix,
+  GitHub approval, or merge. Keep those evidence sources visible in the dashboard and demo.
