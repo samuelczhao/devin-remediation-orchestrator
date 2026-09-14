@@ -107,7 +107,7 @@ def test_presentation_opens_proof_and_disables_refresh(
     parsed = DashboardHTML(response.text)
     assert parsed.details["panel proposal-details"]
     assert parsed.details["export-evidence"]
-    assert not parsed.details["operational-details"]
+    assert "operational-details" not in parsed.details
     assert "/static/dashboard.js" not in response.text
     assert 'http-equiv="refresh"' not in response.text
     assert "page auto-refresh paused" in response.text
