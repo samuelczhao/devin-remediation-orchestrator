@@ -35,13 +35,17 @@
           <article class="rejected"><strong>{{ outcomes.summary.rejected }}</strong><span>Rejected · review notes</span></article>
           <article class="needs-rework"><strong>{{ outcomes.summary.needs_rework }}</strong><span>Needs rework · review notes</span></article>
         </div>
-        <p class="footnote">Verification, human review, and merge are separate signals. A verified regression is not full-suite coverage or approval.</p>
+        <p class="footnote">Verification, human review, and merge are separate signals.{% if not presentation %} A verified regression is not full-suite coverage or approval.{% endif %}</p>
+        {% if not presentation %}
         <p class="footnote">CI: {{ outcomes.summary.ci_passed }} passed · {{ outcomes.summary.ci_failed }} failed · {{ outcomes.summary.ci_pending }} pending · {{ outcomes.summary.ci_no_checks }} without checks · {{ outcomes.summary.ci_unknown }} unknown.</p>
+        {% endif %}
         {% endif %}
         {% if mode == 'simulation' %}
         <p>This run uses fixture outputs. It does not create a real PR or establish a successful fix.</p>
         {% endif %}
+        {% if not presentation %}
         <p class="footnote"><a href="https://github.com/samuelczhao/devin-remediation-orchestrator/blob/main/docs/EVIDENCE.md">Real-run evidence and verification limits</a> · Cost and reviewer effort have not been measured; no savings are claimed.</p>
+        {% endif %}
       </section>
 
       {% if worker_last_error %}<p class="notice">Worker error: {{ worker_last_error }}</p>{% endif %}
@@ -57,6 +61,7 @@
       </details>
       {% endif %}
 
+      {% if not presentation or not outcomes.available %}
       <details class="operational-details" {% if not outcomes.available %}open{% endif %}>
         <summary>Automation details <span>Queue, sessions, usage, and errors</span></summary>
       <section class="metrics" aria-label="Automation activity">
@@ -108,6 +113,7 @@
         <p class="footnote">PR produced means the agent returned a valid artifact, even if its reported checks failed. It does not mean approved or correct. Times run from webhook acceptance to agent completion and exclude human review. Self-serve cost comes from Devin Billing, not the API ACU field.</p>
       </section>
       </details>
+      {% endif %}
       <p class="footnote">{% if presentation %}Presentation view · page auto-refresh paused. <a href="/">Return to auto-refresh</a>{% else %}Page refresh pauses while details are open. <a href="?presentation=true">Presentation view</a> keeps it paused.{% endif %} <a href="">Refresh now</a>. GitHub outcomes use the timestamped snapshot above.</p>
     </main>
   </body>
