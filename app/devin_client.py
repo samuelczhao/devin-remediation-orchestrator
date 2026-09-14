@@ -1,5 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
+from http import HTTPStatus
 from typing import Any, Protocol
 
 import httpx
@@ -52,7 +53,9 @@ CREATED_AFTER_CLOCK_SKEW_SECONDS = 300
 
 
 class DevinAPIError(RuntimeError):
-    pass
+    def __init__(self, message: str, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 class AmbiguousCreateError(DevinAPIError):
@@ -134,7 +137,14 @@ class LiveDevinClient:
         raise DevinAPIError("Devin session lookup exceeded its page limit")
 
     async def terminate_session(self, session_id: str) -> None:
-        await self._request("DELETE", f"{self.base_path}/{session_id}")
+        try:
+            await self._request(
+                "DELETE", f"{self.base_path}/{session_id}", params={"archive": "true"}
+            )
+        except DevinAPIError as error:
+            # A previous cleanup may have succeeded before the process stopped.
+            if error.status_code != HTTPStatus.NOT_FOUND:
+                raise
 
     async def aclose(self) -> None:
         await self.http.aclose()
@@ -182,7 +192,9 @@ class LiveDevinClient:
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as error:
-            raise DevinAPIError(f"Devin API returned HTTP {response.status_code}") from error
+            raise DevinAPIError(
+                f"Devin API returned HTTP {response.status_code}", response.status_code
+            ) from error
 
 
 class FakeDevinClient:

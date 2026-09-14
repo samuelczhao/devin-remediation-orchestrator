@@ -21,6 +21,7 @@ from app.database import TaskStore
 from app.devin_client import DevinClient, FakeDevinClient, LiveDevinClient
 from app.github_webhook import WebhookError, validate_webhook
 from app.orchestrator import Orchestrator
+from app.outcomes import load_report
 from app.prompt import canonical_issue_url
 
 logger = logging.getLogger(__name__)
@@ -106,6 +107,11 @@ def create_app(
         data["worker_last_error"] = orchestrator.last_error
         return JSONResponse(jsonable_encoder(data))
 
+    @app.get("/api/outcomes")
+    async def outcomes() -> JSONResponse:
+        report = load_report(store.list_tasks(), config.app_mode)
+        return JSONResponse(report.model_dump(mode="json"))
+
     @app.get("/health/live")
     async def live() -> dict[str, str]:
         return {"status": "ok"}
@@ -124,6 +130,7 @@ def create_app(
     @app.get("/", response_class=HTMLResponse)
     async def dashboard(request: Request) -> Response:
         workflow_metrics = store.metrics()
+        task_records = store.list_tasks()
         task_views = [
             {
                 **task.model_dump(),
@@ -133,7 +140,7 @@ def create_app(
                 "usage_display": _usage_display(config, task.acus_consumed),
                 "updated_display": _format_timestamp(task.updated_at),
             }
-            for task in store.list_tasks()
+            for task in task_records
         ]
         return templates.TemplateResponse(
             request=request,
@@ -144,6 +151,7 @@ def create_app(
                 "median_cycle": _format_duration(workflow_metrics.median_cycle_seconds),
                 "usage_summary": _usage_summary(config, workflow_metrics.total_acus),
                 "tasks": task_views,
+                "outcomes": load_report(task_records, config.app_mode).model_dump(mode="json"),
                 "worker_last_error": orchestrator.last_error,
                 "worker_last_attempt": _format_timestamp(orchestrator.last_run_at),
                 "worker_last_run": _format_timestamp(orchestrator.last_successful_run),
@@ -206,10 +214,12 @@ def _valid_operator_auth(value: str | None, settings: Settings) -> bool:
     username, separator, password = decoded.partition(":")
     if not separator:
         return False
-    username_matches = hmac.compare_digest(username, settings.control_plane_username)
+    username_matches = hmac.compare_digest(
+        username.encode(), settings.control_plane_username.encode()
+    )
     password_matches = hmac.compare_digest(
-        password,
-        settings.control_plane_password.get_secret_value(),
+        password.encode(),
+        settings.control_plane_password.get_secret_value().encode(),
     )
     return username_matches and password_matches
 

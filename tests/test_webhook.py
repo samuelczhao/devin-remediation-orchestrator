@@ -7,6 +7,7 @@ from typing import cast
 from uuid import uuid4
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
@@ -142,7 +143,8 @@ def test_dashboard_exposes_operational_signals_and_security_headers(tmp_path: Pa
     with TestClient(create_app(settings)) as client:
         response = client.get("/")
     assert "Queued" in response.text
-    assert "Median cycle" in response.text
+    assert "Median time to agent result" in response.text
+    assert "Tasks received" in response.text
     assert "Simulated ACUs" in response.text
     assert "Last attempt" in response.text
     assert 'http-equiv="refresh"' in response.text
@@ -150,8 +152,8 @@ def test_dashboard_exposes_operational_signals_and_security_headers(tmp_path: Pa
     assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
 
 
-def test_live_control_plane_requires_basic_auth(tmp_path: Path) -> None:
-    password = "p" * 32
+@pytest.mark.parametrize("password", ["p" * 32, "é" * 32])
+def test_live_control_plane_requires_basic_auth(tmp_path: Path, password: str) -> None:
     settings = Settings(
         app_mode="live",
         database_path=tmp_path / "tasks.db",
@@ -165,9 +167,16 @@ def test_live_control_plane_requires_basic_auth(tmp_path: Path) -> None:
     app = create_app(settings, FakeDevinClient(settings.github_repository))
     with TestClient(app) as client:
         assert client.get("/api/tasks").status_code == 401
+        assert client.get("/api/outcomes").status_code == 401
         assert client.get("/").status_code == 401
         assert client.get("/health/live").status_code == 200
         assert client.get("/openapi.json").status_code == 404
+        for value in ["operator:wrong", "opérator:wrong", "operator:invalíd"]:
+            invalid = base64.b64encode(value.encode()).decode()
+            assert (
+                client.get("/api/tasks", headers={"authorization": f"Basic {invalid}"}).status_code
+                == 401
+            )
         headers = {"authorization": f"Basic {credentials}"}
         authorized = client.get("/api/tasks", headers=headers)
         dashboard = client.get("/", headers=headers)
@@ -203,7 +212,15 @@ def test_simulation_completes_issue_to_pr_flow(tmp_path: Path) -> None:
                 break
             time.sleep(0.01)
         metrics = client.get("/api/metrics").json()
+        report = client.get("/api/outcomes").json()
+        html = client.get("/").text
     assert task["pr_url"] == "https://github.com/samuelczhao/superset/pull/999"
     assert task["structured_output"]["tests"][0]["outcome"] == "passed"
     assert metrics["pr_produced"] == 1
     assert metrics["worker_last_successful_run"] is not None
+    assert report["available"] is False
+    assert report["summary"] is None
+    assert report["rows"] == []
+    assert 'href="https://github.com/samuelczhao/superset/pull/999"' not in html
+    assert "Simulated PR" in html
+    assert "Simulated session" in html

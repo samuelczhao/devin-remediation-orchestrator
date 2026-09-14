@@ -3,6 +3,10 @@
 These dispositions are independent code-review findings, not GitHub review approvals or CI
 results. The fork has no hosted checks configured.
 
+PR #4 additionally has [independent before/after regression execution](../verification/pr4/README.md)
+at the head below: the original code fails the expected dataset-collision assertion and the fix
+passes. This validates one focused behavior, not the full integration surface or approval to merge.
+
 | PR | Reviewed head | Disposition | Key evidence and limit |
 | --- | --- | --- | --- |
 | [#4](https://github.com/samuelczhao/superset/pull/4) | `d6394296de8682e5ead171f20b4167bee7b7971c` | Accepted candidate | Delegates database child serialization to the canonical dataset exporter; no blocking defect found. A stale skipped-test marker and broader integration coverage remain follow-ups. |

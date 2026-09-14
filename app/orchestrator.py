@@ -1,7 +1,7 @@
 import logging
 import re
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -20,6 +20,7 @@ from app.schemas import DevinResult, DevinSession, TaskRecord, TaskState
 
 logger = logging.getLogger(__name__)
 MAX_ERROR_DETAIL = 500
+PENDING_TERMINATION_ERRORS = {"session_termination_pending", "session_terminate_failed"}
 
 
 @dataclass(frozen=True)
@@ -76,9 +77,17 @@ class Orchestrator:
         except Exception:
             logger.exception("task_reconciliation_failed", extra={"task_id": task.id})
             try:
+                current = self.store.get(task.id)
+                code = "unexpected_task_error"
+                if (
+                    current
+                    and current.error_code
+                    and current.error_code in PENDING_TERMINATION_ERRORS
+                ):
+                    code = current.error_code
                 self.store.record_error(
                     task.id,
-                    "unexpected_task_error",
+                    code,
                     "Unexpected task reconciliation error",
                 )
             except Exception:
@@ -105,6 +114,7 @@ class Orchestrator:
             return True
 
     async def _recover_ambiguous(self, task: TaskRecord) -> bool:
+        # A lost POST response does not tell us whether Devin started paid work.
         try:
             session = await self.client.find_session_by_tag(task_tag(task.id), task.created_at)
         except DevinAPIError as error:
@@ -133,27 +143,32 @@ class Orchestrator:
             return await self._recover_ambiguous(task)
         if not task.session_id:
             return True
+        if task.error_code in PENDING_TERMINATION_ERRORS:
+            return await self._finish_termination(task, _saved_session(task))
         try:
             session = await self.client.get_session(task.session_id)
         except DevinAPIError as error:
             self.store.record_error(task.id, "session_poll_failed", str(error))
             return False
         if should_terminate_session(session, self.settings.github_repository):
-            observation = _terminal_observation(session, self.settings.github_repository)
             pending = _termination_pending_observation(session, self.settings.github_repository)
+            # Save the validated result before cleanup can change the remote session.
             self.store.observe_session(task.id, **pending.__dict__)
-            try:
-                await self.client.terminate_session(task.session_id)
-            except DevinAPIError as error:
-                observation = _termination_failure_observation(
-                    session,
-                    self.settings.github_repository,
-                    str(error),
-                )
-                self.store.observe_session(task.id, **observation.__dict__)
-                return False
-        else:
-            observation = evaluate_session(session, self.settings.github_repository)
+            return await self._finish_termination(task, session)
+        observation = evaluate_session(session, self.settings.github_repository)
+        self.store.observe_session(task.id, **observation.__dict__)
+        return True
+
+    async def _finish_termination(self, task: TaskRecord, session: DevinSession) -> bool:
+        observation = _terminal_observation(session, self.settings.github_repository)
+        try:
+            await self.client.terminate_session(session.session_id)
+        except DevinAPIError as error:
+            observation = _termination_failure_observation(
+                session, self.settings.github_repository, str(error)
+            )
+            self.store.observe_session(task.id, **observation.__dict__)
+            return False
         self.store.observe_session(task.id, **observation.__dict__)
         return True
 
@@ -256,6 +271,22 @@ def _terminal_observation(session: DevinSession, repository: str) -> SessionObse
     return evaluate_session(terminal, repository)
 
 
+def _saved_session(task: TaskRecord) -> DevinSession:
+    return DevinSession.model_validate(
+        {
+            "session_id": task.session_id,
+            "url": task.session_url,
+            "status": task.devin_status,
+            "status_detail": task.devin_status_detail,
+            "acus_consumed": task.acus_consumed,
+            "structured_output": task.structured_output,
+            "pull_requests": (
+                [{"pr_url": task.pr_url, "pr_state": task.pr_state}] if task.pr_url else []
+            ),
+        }
+    )
+
+
 def _termination_failure_observation(
     session: DevinSession,
     repository: str,
@@ -311,7 +342,7 @@ def _target_pr(session: DevinSession, repository: str) -> tuple[str | None, str 
 
 
 def _with_state(base: SessionObservation, state: TaskState) -> SessionObservation:
-    return SessionObservation(**{**base.__dict__, "state": state})
+    return replace(base, state=state)
 
 
 def _with_error(
@@ -321,6 +352,4 @@ def _with_error(
     detail: str | None,
 ) -> SessionObservation:
     safe_detail = (detail or code)[:MAX_ERROR_DETAIL]
-    return SessionObservation(
-        **{**base.__dict__, "state": state, "error_code": code, "error_detail": safe_detail}
-    )
+    return replace(base, state=state, error_code=code, error_detail=safe_detail)

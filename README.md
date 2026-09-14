@@ -39,6 +39,25 @@ GitHub issues.labeled webhook
 See [the architecture and acceptance gate](docs/ARCHITECTURE.md) for failure semantics,
 idempotency boundaries, and assignment traceability.
 
+The demo produced four PRs from three initial issues and one corrective attempt. One focused
+Superset regression has now been [independently executed before and after the fix](verification/pr4/README.md).
+No PR is GitHub-approved or merged in the recorded snapshot. Review rejected the first tagging fix;
+the replacement still needs work. The dashboard separates these engineering outcomes from agent activity.
+
+## Reading the code
+
+Start with `app/main.py`: it accepts the webhook and serves the dashboard. Then follow:
+
+- `github_webhook.py`: checks the signature, label, repository, and approving actor.
+- `database.py`: stores tasks, prevents duplicate work, and calculates metrics.
+- `orchestrator.py`: starts Devin, polls progress, and records results.
+- `devin_client.py`: contains the live API adapter and deterministic simulation adapter.
+- `prompt.py` and `schemas.py`: define the task instructions and validated data shapes.
+- `outcomes.py`: joins a read-only GitHub snapshot and commit-specific review notes to task PRs.
+
+The application runs one worker in one process with SQLite. GitHub holds the issues and PRs;
+Devin performs the repository work. There is no separate queue server or frontend application.
+
 ## Run the complete simulation with Docker
 
 Prerequisite: Docker with Compose.
@@ -58,6 +77,10 @@ not report `mode=simulation`. Expected terminal evidence:
 - a target-repository PR URL;
 - one Devin-reported passing test;
 - PR yield, cycle time, and simulated ACUs in `/api/metrics`.
+
+Simulated sessions and PRs are fixtures, not clickable external artifacts. The Engineering outcomes
+panel explicitly withholds real approval, merge, and regression claims in simulation and links to
+the separately recorded real-run evidence.
 
 If port 8000 is already in use, bind a different loopback port without changing the container:
 
@@ -109,6 +132,12 @@ this safety gate before spending ACUs:
 
 This project uses macOS Keychain locally:
 
+The live commands below are the runbook for this existing account and fork, not a fresh-account
+installer. They assume the Devin token and organization ID have already been stored in Keychain.
+On another machine, supply the required `REMEDIATION_` environment variables directly instead.
+To use a different fork or approving actor, update the identity settings and forward them through
+the Compose override. The default simulation needs neither Keychain nor a Devin account.
+
 ```bash
 webhook_secret="$(openssl rand -hex 32)"
 control_plane_password="$(openssl rand -hex 32)"
@@ -159,13 +188,15 @@ relabeling them from creating another session. The live delivery GUIDs are prese
 [the evidence](docs/EVIDENCE.md).
 
 Keep approvals enabled unless the Devin installation is repository-limited and an unattended
-demo is required. Even with approval bypass enabled, sessions are ACU-capped, limited to one
-repository, instructed not to merge, and constrained by protected `master`.
+demo is required. Each request specifies the target fork and a per-session ACU limit. Actual
+repository access must be restricted in the Devin GitHub installation; the `repos` field alone
+is not an access-control boundary. Sessions are instructed not to merge, and `master` is protected.
 
 ## Correctness and recovery guarantees
 
 - SQLite persists the webhook delivery before any Devin API call.
-- Delivery ID and `(repository_id, issue_id)` uniqueness prevent duplicate ACU spend.
+- Delivery ID and `(repository_id, issue_id)` uniqueness prevent retries and relabeling from
+  creating another task or paid session for the same issue.
 - Session creation is not falsely described as exactly-once: a network timeout can make the
   remote result ambiguous because the API exposes no idempotency key.
 - Every session receives a unique task tag. After an ambiguous create, the reconciler searches by
@@ -180,14 +211,15 @@ repository, instructed not to merge, and constrained by protected `master`.
   the paid create request is never repeated.
 - The reconciler terminates completed conversational sessions through Devin's official endpoint
   only after validating their structured result and any claimed target PR.
-- `exit` is not success. A successful task requires valid structured output and a PR URL for the
-  allowlisted fork.
+- `exit` is not success. A PR-producing task requires valid structured output and a PR URL for the
+  allowlisted fork. Its reported checks can still fail; this is not a correctness or approval gate.
 - Waiting, suspended, blocked, API error, invalid-output, and wrong-repository outcomes remain
   distinguishable.
 - A malformed response for one task cannot prevent later tasks in the same sweep from progressing.
 - Validated terminal evidence is persisted as `session_termination_pending` before the cleanup
-  call. Success transitions terminal without trusting a stale DELETE body; failure or process
-  death retains the PR/output evidence and remains retryable.
+  call. Cleanup retries use that saved evidence rather than fetching and overwriting it after
+  termination. DELETE requests archive the session; an already-missing session completes cleanup,
+  while permission and transient errors retain the evidence and remain attention-required.
 
 Sessionless ambiguous creates count against the active limit on purpose: the service cannot know
 whether a paid remote session exists. If the limit fills with unresolved ambiguous tasks, intake
@@ -201,7 +233,15 @@ The GitHub webhook follows GitHub's
 
 ## What engineering leadership can see
 
-The dashboard and `/api/metrics` answer whether the workflow is operating:
+The first dashboard panel and `/api/outcomes` show what happened to proposed fixes:
+
+- independently executed, SHA-matched regression evidence, separately from hosted CI;
+- GitHub approval, merge, and closed-without-merge counts;
+- current-at-snapshot PR and CI status, including unknown or absent checks;
+- recorded candidate, rejected, and needs-rework assessments with review evidence;
+- snapshot time and a warning after 24 hours. These are manual snapshots, not live GitHub polling.
+
+The lower activity panel and `/api/metrics` show whether the automation is operating:
 
 - accepted, queued, active, attention-required, blocked, and failed task counts;
 - PR count and PR yield among terminal tasks;
@@ -211,11 +251,28 @@ The dashboard and `/api/metrics` answer whether the workflow is operating:
 - Devin-reported test counts, session-time PR state, and per-task error detail;
 - current worker attempt/healthy timestamps plus stale/error-aware readiness.
 
-PR yield is intentionally not labeled “success rate.” Devin-reported test commands are agent
-claims until confirmed by the PR's CI and reviewer inspection. The submission reports observed
-results from a small live sample rather than generalized productivity claims.
-The MVP does not yet ingest current GitHub PR, review, or Superset CI state; the evidence table and
-SHA-pinned review report carry those separate quality outcomes.
+PR yield is an output metric, not a success rate. A failed test can accompany a produced PR. The
+median time runs from accepted webhook to agent completion, excludes human review, and is not
+engineering labor saved. Unknown cost and unmeasured reviewer effort are not presented as zero.
+
+### Refresh the outcome snapshot
+
+From the repository, with an authenticated GitHub CLI that can read the public fork:
+
+```bash
+uv run python -m scripts.refresh_outcomes
+```
+
+This performs read-only GitHub requests and atomically replaces `app/evidence/github_outcomes.json`.
+It does not create Devin sessions or change any PR. Failed refreshes retain the previous snapshot.
+Use `--prs 4 5 6 8 9` to include a new task's PR. Rebuild the Docker image with your chosen Compose
+configuration to include the refreshed file; use the explicit live override for an existing live
+container. GitHub credentials remain on the operator's machine, not in the application image.
+
+`app/evidence/review_notes.json` contains separate, manually recorded review assessments. They count
+only while the PR head matches the reviewed commit; a new head makes the assessment stale and
+invalidates the previous regression-verification count. A candidate never counts as approved.
+Missing snapshot coverage displays unavailable outcomes, while task progress remains visible.
 
 ## Observed live result
 
@@ -232,12 +289,15 @@ time. This self-serve account returned 0.0 in the API's enterprise ACU field, so
 does not infer usage or cost from it; Devin Billing is authoritative. The fork has no GitHub checks
 configured, so exact session-reported tests and review limits remain explicit in the evidence.
 The live sessions used an earlier control-plane build; current hardening is verified by automated
-tests, CI, and simulation rather than another paid run.
+tests and simulation rather than another paid run. PR #4's regression was independently executed
+against both pinned commits using real Superset code and SQLite fixtures: expected failure on the
+base, pass on the fix. This is one unit-level acceptance check, not full-suite or merge approval.
 
 ## Evidence and presentation
 
 - [Implementation evidence](docs/EVIDENCE.md)
 - [SHA-pinned remediation review report](docs/REVIEW_REPORTS.md)
+- [Independent PR #4 regression and reproduction instructions](verification/pr4/README.md)
 - Loom video supplied separately with the assignment submission
 - [Issue #1 technical specification](docs/issues/database-export-dataset-collision.md)
 - [Issue #2 technical specification](docs/issues/sync-tags-favorite-type.md)
@@ -246,7 +306,8 @@ tests, CI, and simulation rather than another paid run.
 
 ## Production extension
 
-The demo intentionally uses one process and SQLite. A customer rollout would add Postgres,
-lease-based workers, SSO/RBAC, GitHub App identity, alerts and SLOs, CI/reviewer outcome ingestion,
-policy templates by repository, and a shadow-mode phase before expanding beyond low-risk
-maintenance work.
+The next step is a narrow pilot with a code owner, comparing implementation effort saved against
+review, rework, and agent cost. Expand only categories that produce acceptable fixes with a net
+reduction in engineering effort. Continuous GitHub review/CI updates and notifications would
+replace the manual snapshot. Stronger identity, audit retention, and worker infrastructure should
+follow the customer's deployment and scale requirements; one process and SQLite suffice here.
