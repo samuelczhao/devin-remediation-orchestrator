@@ -26,7 +26,7 @@ signed webhook ingress -----> SQLite delivery/task/event ledger
 
 | Assignment requirement | Implementation | Completion evidence |
 | --- | --- | --- |
-| Fork Apache Superset | Public `samuelczhao/superset` fork pinned to the inspected commit | Fork URL and commit SHA in README |
+| Fork Apache Superset | Public `samuelczhao/superset` fork pinned to the inspected commit | Fork URL in README; commit SHA in the evidence report |
 | Identify issues | Three initial defects plus one corrective issue with bounded acceptance criteria | Public issues in the fork |
 | Event trigger | `issues.labeled` webhook for `devin:ready` | GitHub delivery plus persisted delivery ID |
 | Initiate Devin | `POST /v3/organizations/{org_id}/sessions` | Session ID and link |
@@ -51,8 +51,8 @@ GitHub issue text is untrusted. A request is accepted only when all of these che
 
 The issue body is truncated and control characters are removed before prompting. Devin gets no
 session secrets. Each session explicitly targets only the fork; production setup should also
-restrict the GitHub installation to that repository. Sessions have an ACU cap, create PRs only,
-and cannot merge.
+restrict the GitHub installation to that repository. Sessions have an ACU cap and are instructed
+to create PRs without merging. Merge protection comes from GitHub branch rules, not the prompt.
 
 ## Ownership and idempotency
 
